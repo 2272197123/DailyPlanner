@@ -23,6 +23,7 @@ cd study_planner && python launcher.py    # FastAPI :5000，自动回退静态�
 constants.js → utils.js → api.js → storage.js → store.js
   → schedule.js, currency.js, archive.js, goals.js, routines.js, modes.js,
     auth.js, toast.js, timers.js, toggles.js, effects.js, theme.js, reminders.js
+  → ai.js
   → render.js, timeline.js, events.js, modal.js, overlay-anim.js, import.js, ledger.js
   → app.js
 ```
@@ -51,7 +52,9 @@ constants.js → utils.js → api.js → storage.js → store.js
 | `dp_dayHistory_{date}` | object | 每日完成统计快照 |
 | `dp_ledger` | array | 晶圆交易明细 |
 | `dp_acc_{date}` | array | 每日记账条目 |
-| `dp_archive_{date}` | object | 存档数据本地缓存 |
+| `dp_day_data_{date}` | object | v9.0 每日独立数据副本（blocks+routines+progress+timelineCfg+archiveData） |
+| `dp_aiChat_{date}` | array | AI 对话历史本地缓存（服务器持久化为准） |
+| `dp_archive_{date}` | object | 存档数据本地缓存（已迁移至 day_data.archiveData） |
 | `dp_authToken` / `dp_authRefreshToken` | string | JWT token |
 | `dp_user` | object | 用户信息缓存 |
 
@@ -106,11 +109,31 @@ document.getElementById('balanceText').textContent = xxx;
 - 切换时按 `newFactor/oldFactor` 比例缩放 duration 和 estMin，不删计划
 - `resetToday()` 可重置当日所有完成状态并退款
 
-### 存档
+### v9.0 每日独立数据模型（Copula-on-Write）
 
-- `archiveDay(date)` 存档真实日期而非 `store.currentDate`
-- 双写 LS + `PUT /api/archive/{date}`
-- 23:30 自动存档今天；凌晨自动补存昨天
+- 每个日期首次访问时从模板 Copy 生成独立副本到 `dp_day_data_{date}`
+- `initDailyData(date)` — 首次初始化
+- `loadDailyData(date)` — 加载到 store
+- `syncStoreToDailyData(date)` — 同步写回
+- `saveDailyData(date, data)` — 双重持久化（LS + `PUT /api/day-data/{date}`）
+- 修改某天的日课/任务不影响其他日期
+- 存档后的 `archiveData` 写入 `dp_day_data_{date}.archiveData`
+
+### AI 助手（v9.0）
+
+- 入口：右下角浮动按钮 + Shift+Space 快捷键
+- 抽屉宽度可通过左边缘拖拽调整（280-620px）
+- `initAiDrawer()` 在 `app.js` 的 `renderAll()` 之后调用
+- 对话历史按日期存储：`GET/PUT /api/chat-history/{date}`
+- `ai.js` 在加载顺序中位于 effects.js 之后、render.js 之前
+
+### 存档（v9.0 重写）
+
+- `archiveDay(date)` → 写入 `dp_day_data_{date}.archiveData`
+- `triggerArchive(date)` → 弹出自评面板 → AI 评价 → 导出
+- 存档时间用户可自定义（`dp_prefs.archiveHour/Minute`）
+- 双写 LS + `PUT /api/day-data/{date}`（携带 archiveData）
+- AI 评价人设：用户通过 `dp_prefs.aiPersonaPrompt` 自由定义，无预设选项
 
 ### 两个 Guard
 
