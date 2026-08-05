@@ -37,7 +37,7 @@ def run_fastapi():
     from server.main import app
 
     url = f"http://localhost:{PORT}/"
-    print(f"  DailyPlan v8.0 — FastAPI 模式")
+    print(f"  DailyPlan v10.0 — FastAPI 模式 (Vue 3 SPA)")
     print(f"  {url}")
     print(f"  数据: {ROOT / 'server' / 'dailyplan.db'}")
     threading.Thread(target=open_browser, args=(url,), daemon=True).start()
@@ -63,16 +63,42 @@ def run_static():
 
         def do_GET(self):
             if self.path in ('/', '/index.html'):
+                spa_path = BASE.parent / 'server' / 'static' / 'index.html'
+                if spa_path.exists():
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'text/html; charset=utf-8')
+                    self.end_headers()
+                    with open(spa_path, 'rb') as f:
+                        self.wfile.write(f.read())
+                    return
                 self.path = '/index_modular.html'
+            elif self.path.startswith('/assets/'):
+                spa_asset = BASE.parent / 'server' / 'static' / self.path.lstrip('/')
+                if spa_asset.exists():
+                    self.send_response(200)
+                    ct = 'application/javascript'
+                    if self.path.endswith('.css'): ct = 'text/css'
+                    elif self.path.endswith('.svg'): ct = 'image/svg+xml'
+                    self.send_header('Content-Type', ct + '; charset=utf-8')
+                    self.end_headers()
+                    with open(spa_asset, 'rb') as f:
+                        self.wfile.write(f.read())
+                    return
             return super().do_GET()
 
         def do_HEAD(self):
             if self.path in ('/', '/index.html'):
+                spa_path = BASE.parent / 'server' / 'static' / 'index.html'
+                if spa_path.exists():
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'text/html; charset=utf-8')
+                    self.end_headers()
+                    return
                 self.path = '/index_modular.html'
             return super().do_HEAD()
 
-    url = f"http://localhost:{PORT}/index_modular.html"
-    print(f"  DailyPlan v8.0 — 静态回退模式（未安装 fastapi/uvicorn，数据仅存浏览器）")
+    url = f"http://localhost:{PORT}/"
+    print(f"  DailyPlan v10.0 — 静态回退模式（未安装 fastapi/uvicorn，数据仅存浏览器）")
     print(f"  {url}")
     threading.Thread(target=open_browser, args=(url,), daemon=True).start()
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
