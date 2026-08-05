@@ -2,7 +2,6 @@
 
 > 本文档供 AI Agent（Claude Code / Trellis / 其他）阅读。
 > 用户文档见 [study_planner/README.md](study_planner/README.md)。
-> 技术架构详见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 > Trellis 工作流见 `.trellis/workflow.md`。
 
 ---
@@ -10,181 +9,142 @@
 ## 一、启动
 
 ```bash
-cd study_planner && python launcher.py    # FastAPI :5000，自动回退静态模式
+# 生产模式（FastAPI 后端 + Vue 3 SPA）
+cd study_planner && python launcher.py    # :5000，自动打开浏览器
+
+# 纯静态回退（无 fastapi/uvicorn 时）
+# launcher.py 自动检测并退化为静态模式
+
+# Vue 3 开发模式（HMR 热更新）
+cd frontend && npm run dev                 # :5173，proxy /api → :8000
 ```
 
-入口：`study_planner/index_modular.html`（唯一入口，不要创建 index.html）
+**入口**：
+- FastAPI 模式：`http://localhost:5000/` → Vue 3 SPA（`server/static/index.html`）
+- 无 Vue 3 构建产物时自动回退到 `study_planner/index_modular.html`（旧前端）
+- Vue 3 构建：`cd frontend && npm run build` → 产物输出到 `server/static/`
 
 ---
 
-## 二、JS 模块加载顺序（必须严格）
+## 二、项目结构（v10.0）
 
 ```
-constants.js → utils.js → api.js → storage.js → store.js
-  → schedule.js, currency.js, archive.js, goals.js, routines.js, modes.js,
-    auth.js, toast.js, timers.js, toggles.js, effects.js, theme.js, reminders.js
-  → ai.js
-  → render.js, timeline.js, events.js, modal.js, overlay-anim.js, import.js, ledger.js
-  → app.js
+DailyPlan/
+├── frontend/                 ← Vue 3 SPA（新前端，主力）
+│   ├── src/
+│   │   ├── stores/           ← 10 个 Pinia store（schedule/routines/goals/archive/ai/currency/accounting/timer/theme/toast）
+│   │   ├── components/       ← Vue 组件（timeline/goals/archive/ai/accounting/layout/shared）
+│   │   ├── api/client.js     ← axios 封装（JWT 注入 + 错误静默降级）
+│   │   ├── utils/            ← constants.js + format.js
+│   │   └── assets/styles/    ← CSS 变量 + 基础样式 + 氛围元素
+│   └── vite.config.js        ← proxy /api → :8000，build → server/static/
+├── server/                   ← FastAPI 后端（32 个 REST 端点）
+│   ├── main.py               ← 应用入口 + 端点 + 静态文件挂载
+│   ├── db.py                 ← DB 抽象层（SQLite/MySQL/PostgreSQL）
+│   ├── models.py             ← Pydantic 模型
+│   ├── auth.py               ← JWT 认证
+│   ├── ai_proxy.py           ← DeepSeek AI 代理
+│   └── static/               ← vite build 产物（index.html + assets/）
+├── study_planner/            ← 旧前端（保留兼容，逐步废弃）
+│   ├── js/                   ← 旧 27 个 vanilla JS 模块
+│   ├── css/                  ← 旧 CSS
+│   └── index_modular.html    ← 旧入口
+└── .trellis/                 ← Trellis 工作流系统
 ```
-
-全局变量：`store`, `LS`。所有函数挂 window。
 
 ---
 
-## 三、localStorage 键空间（dp_*）
+## 三、Pinia Store 索引（Vue 3）
 
-| 键 | 类型 | 内容 |
-|----|------|------|
-| `dp_schedules` | object | 所有日期计划缓存 |
-| `dp_balance` | number | 晶圆余额 |
-| `dp_mode` | string | 当前档位 |
-| `dp_bigGoals` | array | 长期目标 |
-| `dp_routines` | array | 日课预设 |
-| `dp_modeCfg` | object | 档位自定义配置 |
-| `dp_progress` | object | 反馈与评分 |
-| `dp_prefs` | object | 皮肤/主题偏好 |
-| `dp_settings` | object | 当前主题/激活目标 |
-| `dp_earned_{date}` | array | 某日已领取收益项 |
-| `dp_mode_lock_{date}` | object | 模式锁 |
-| `dp_timelineCfg` | object | `{date: {start, order}}` 时间轴配置 |
-| `dp_timers` / `dp_stTimers` | object | 计时器状态 |
-| `dp_dayHistory_{date}` | object | 每日完成统计快照 |
-| `dp_ledger` | array | 晶圆交易明细 |
-| `dp_acc_{date}` | array | 每日记账条目 |
-| `dp_day_data_{date}` | object | v9.0 每日独立数据副本（blocks+routines+progress+timelineCfg+archiveData） |
-| `dp_aiChat_{date}` | array | AI 对话历史本地缓存（服务器持久化为准） |
-| `dp_archive_{date}` | object | 存档数据本地缓存（已迁移至 day_data.archiveData） |
-| `dp_authToken` / `dp_authRefreshToken` | string | JWT token |
-| `dp_user` | object | 用户信息缓存 |
+| Store | 文件 | 核心职责 |
+|-------|------|---------|
+| `useScheduleStore` | `stores/schedule.js` | 日程数据、日期导航、模式切换、导入、时间轴计算 |
+| `useRoutineStore` | `stores/routines.js` | 日课模板 + 每日副本 + pushToTemplate |
+| `useGoalStore` | `stores/goals.js` | 长期目标 CRUD、阶段/里程碑勾选 |
+| `useArchiveStore` | `stores/archive.js` | 每日复盘、存档快照、AI 评价、MD/PDF 导出 |
+| `useAiStore` | `stores/ai.js` | AI 抽屉、智能问候、上下文注入、任务顺延、对话压缩 |
+| `useCurrencyStore` | `stores/currency.js` | XP 余额（唯一写入点）、等级计算、交易流水 |
+| `useAccountingStore` | `stores/accounting.js` | 记账条目、分类管理、时间筛选、Canvas 图表 |
+| `useThemeStore` | `stores/theme.js` | 8 套主题切换、自定义 CSS 变量 |
+| `useToastStore` | `stores/toast.js` | 全局 toast 通知 |
 
 ---
 
 ## 四、数据流原则
 
-### 写
-1. `store` 先更新
-2. `LS.set()` 本地即时缓存
-3. `API.saveXxx()` 异步写通服务器（失败静默降级）
+### 写操作（三步）
+1. Pinia state 即时更新（响应式 UI）
+2. `localStorage.setItem()` 本地缓存
+3. `api.put/post()` 异步写服务器（失败静默降级）
 
-### 读
-1. 服务器优先
-2. LS 兜底
+### 读操作（两步）
+1. `api.get()` 服务器优先
+2. 失败 → `localStorage.getItem()` 兜底
 
-### 余额唯一写入点
+### XP 余额唯一写入点
 
-`addBalance()` / `setBalance()` 是唯二修改余额的路径。
-
-```javascript
-// 正确
-addBalance(100, '完成任务奖励');
-setBalance(newBalance);
-
-// 错误 — 绝不绕过
-LS.set('dp_balance', xxx);
-document.getElementById('balanceText').textContent = xxx;
-```
+`useCurrencyStore.addXP()` / `setBalance()` 是唯二修改 XP 的路径。
 
 ---
 
 ## 五、关键架构约束
 
+### Vue 3 规范
+- Composition API + `<script setup>` 语法
+- CSS 变量是唯一颜色入口，组件中不硬编码颜色
+- 氛围元素（光晕球体、宣纸纹理、墨色虚光、朱砂印章）在 `App.vue` 纯 CSS 渲染，组件不感知
+
+### 设计系统
+- 主色：`--accent: #1e2030`（靛蓝墨）
+- 字体：Noto Serif SC（标题）+ JetBrains Mono（数据）+ 系统无衬线
+- 时间三态：`--state-past`（琥珀） / `--accent`（默认） / `--state-future`（淡紫）
+- 过渡：必须指定属性，不用 `transition: all`
+
+### API 向后兼容
+- 现有 32 个 FastAPI 端点路径和响应格式保持不变
+- 存量数据从 LS 迁移到服务器数据库通过 API 调用完成
+
 ### 禁止事项
-
-- **禁止自动生成计划** — `generateSchedule()` 的 Route B（`buildSlots()` 自动生成）已完全移除。计划只能通过 JSON 导入创建。
-- **禁止内置数据回落** — `DEFAULT_ROUTINES` / `DEFAULT_GOALS` 仅保留为参考模板，运行时代码不得将其作为回落值。
-- **禁止 `const` / `let` / 箭头函数 / 模板字符串** — 只用 `var` 和 `function`。Python http.server 环境下 `const` 可能静默失败（整个函数体被跳过且不报错）。`async/await` 仅限 api.js/store.js 既有代码。
-- **所有用户数据插入 innerHTML 前必须 `escapeHtml()`** — JSON 导入的数据也是用户数据。
-
-### 时间轴渲染
-
-- 渲染入口是 `renderTimeline()`，不是旧 `renderRoutines()`/`renderTasks()`
-- 每项只有 `duration`；开始/结束时间由 `getTimelineStart()` + 前序累加
-- `store._tlFresh` 是一次性标志，只在日期切换/导入/首屏设为 true
-- 导入新计划必须 `clearTimelineCfg(date)`
-
-### 模式切换
-
-- `setMode(m)` 检查锁；锁定拒绝
-- 切换时按 `newFactor/oldFactor` 比例缩放 duration 和 estMin，不删计划
-- `resetToday()` 可重置当日所有完成状态并退款
-
-### v9.0 每日独立数据模型（Copula-on-Write）
-
-- 每个日期首次访问时从模板 Copy 生成独立副本到 `dp_day_data_{date}`
-- `initDailyData(date)` — 首次初始化
-- `loadDailyData(date)` — 加载到 store
-- `syncStoreToDailyData(date)` — 同步写回
-- `saveDailyData(date, data)` — 双重持久化（LS + `PUT /api/day-data/{date}`）
-- 修改某天的日课/任务不影响其他日期
-- 存档后的 `archiveData` 写入 `dp_day_data_{date}.archiveData`
-
-### AI 助手（v9.0）
-
-- 入口：右下角浮动按钮 + Shift+Space 快捷键
-- 抽屉宽度可通过左边缘拖拽调整（280-620px）
-- `initAiDrawer()` 在 `app.js` 的 `renderAll()` 之后调用
-- 对话历史按日期存储：`GET/PUT /api/chat-history/{date}`
-- `ai.js` 在加载顺序中位于 effects.js 之后、render.js 之前
-
-### 存档（v9.0 重写）
-
-- `archiveDay(date)` → 写入 `dp_day_data_{date}.archiveData`
-- `triggerArchive(date)` → 弹出自评面板 → AI 评价 → 导出
-- 存档时间用户可自定义（`dp_prefs.archiveHour/Minute`）
-- 双写 LS + `PUT /api/day-data/{date}`（携带 archiveData）
-- AI 评价人设：用户通过 `dp_prefs.aiPersonaPrompt` 自由定义，无预设选项
-
-### 两个 Guard
-
-- `guardEdit()` — 只检查历史日期（用于导入/创建）
-- `guardToggle()` — 额外检查今日 23:30-04:00 禁止窗口（用于勾选完成）
+- 不引入 `const` / `let` / 箭头函数 / 模板字符串到旧 JS 模块
+- 不在组件中硬编码颜色（只用 CSS 变量）
+- 用户数据插入 DOM 前必须 `escapeHtml()`
+- 不创建 `index.html` 覆盖旧入口（旧前端入口是 `index_modular.html`）
+- 不触碰氛围元素
 
 ---
 
-## 六、已知陷阱
+## 六、localStorage 键空间（dp_*）
 
-### overlay-anim.js 覆写
-
-`overlay-anim.js` 中有 `openTaskModal` 等 open 函数的独立覆写副本。给任务弹窗加字段时必须**两处同步改**：
-1. `js/modal.js` — 弹窗填充逻辑
-2. `js/overlay-anim.js` — 覆写副本
-
-### 弹窗渲染
-
-CSS animation（`fadeIn`、`slideUp`）绑定在元素级别，`innerHTML` 赋值 = 新 DOM → 动画重播。所有 `open*()` 必须：
-1. 先写入 innerHTML
-2. 再移除 hidden 类
-
-### SQLite 方言转换（db.py）
-
-- `INSERT` 的 `VALUES (` 必须带空格（避免被正则误匹配）
-- `ON DUPLICATE KEY UPDATE` 后的 `VALUES(col)` 不带空格
-- `INSERT IGNORE` → 自动转 `INSERT OR IGNORE`
-
-### 阻塞 id 稳定性
-
-`buildScheduleObject()` 给缺失 id 的 block 分配 `block_{idx}_{hash(subject+time+date)}`。时间轴拖拽依赖唯一 key。
-
----
-
-## 七、设计系统约束
-
-1. **字体**: Noto Serif SC（标题）+ JetBrains Mono（数据）+ 系统无衬线（正文）。不用 Inter / Roboto / Arial
-2. **主色**: `--accent: #1e2030`（靛蓝墨），不用旧版 `#2b3a5c` / `#4F46E5`
-3. **CSS 变量是唯一颜色入口** — 不在组件中硬编码颜色
-4. **氛围元素不可移除**: 光晕球体（`.ambient-orb`）、宣纸纹理（`.paper-texture`）、墨色虚光（`body::after`）、朱砂印章（`.hanko-seal`）
-5. **不动 JS 来配合 UI** — UI 层纯 CSS，JS 不应感知
-6. **不用 `transition: all`** — 明确指定属性
-7. **购买主题保留全部 6 套**: sakura / forest / ocean / sunset / noir / vapor
+| 键 | 类型 | 内容 |
+|----|------|------|
+| `dp_schedules` | object | 所有日期计划缓存 |
+| `dp_balance` | number | XP 余额 |
+| `dp_mode` | string | 当前档位 |
+| `dp_bigGoals` | array | 长期目标 |
+| `dp_routines` | array | 日课预设模板 |
+| `dp_modeCfg` | object | 档位自定义配置 |
+| `dp_progress` | object | 反馈与评分 |
+| `dp_prefs` | object | 主题偏好 + AI 人设 + 存档时间 |
+| `dp_settings` | object | 当前主题/激活目标 |
+| `dp_earned_{date}` | array | 某日已领取 XP 项 |
+| `dp_timelineCfg` | object | `{date: {start, order}}` 时间轴配置 |
+| `dp_timers` / `dp_stTimers` | object | 计时器状态 |
+| `dp_dayHistory_{date}` | object | 每日完成统计快照 |
+| `dp_ledger` | array | XP 交易明细 |
+| `dp_acc_{date}` | array | 每日记账条目 |
+| `dp_day_data_{date}` | object | 每日独立数据（blocks+routines+progress+archiveData） |
+| `dp_aiChat_{date}` | array | AI 对话历史本地缓存 |
+| `dp_apiConfig` | object | AI API 配置（key/url/model） |
+| `dp_authToken` / `dp_authRefreshToken` | string | JWT token |
+| `dp_user` | object | 用户信息缓存 |
 
 ---
 
-## 八、后端模块
+## 七、后端模块
 
 | 文件 | 职责 |
 |------|------|
-| `server/main.py` | FastAPI 应用，32 个 REST 端点 + CORS + 静态文件 + no-cache 中间件 |
+| `server/main.py` | FastAPI 应用，32 个 REST 端点 + CORS + 静态文件 + 无缓存中间件 |
 | `server/db.py` | DB 抽象层（SQLiteDB / MySQLDB / PostgreSQLDB），20+ 业务函数 |
 | `server/models.py` | Pydantic 模型（Block / DailyPlan / UserCreate / AuthResponse 等 9 组） |
 | `server/auth.py` | JWT + bcrypt 认证（注册/登录/刷新/鉴权依赖） |
@@ -194,7 +154,7 @@ DB 抽象层：业务代码统一写 MySQL 方言 → SQLiteDB/PostgreSQLDB 各�
 
 ---
 
-## 九、Docker 部署
+## 八、Docker 部署
 
 ```bash
 # 开发模式（App + PostgreSQL）
@@ -208,13 +168,23 @@ docker compose --profile production up -d
 
 ---
 
-## 十、Trellis 集成
+## 九、已知陷阱
 
-本项目已接入 Trellis 工作流系统。Trellis 文件位于：
+### Vue 3 热更新 + FastAPI
+- `npm run dev` 时 Vite proxy 转发 `/api/*` 到 `localhost:8000`
+- 确保 FastAPI 在 8000 端口运行（非 5000），避免端口冲突
 
-- `.trellis/workflow.md` — 开发阶段与任务流程
-- `.trellis/spec/` — 分包分层的编码规范
-- `.trellis/tasks/` — 任务目录（PRD、设计、研究）
-- `.trellis/workspace/` — 开发者日志
+### 旧前端 overlay-anim.js 覆写
+- `overlay-anim.js` 中有 `openTaskModal` 等 open 函数的独立覆写副本，修改时必须两处同步
 
-使用 `trellis` CLI 管理任务生命周期。详情见 `.trellis/workflow.md`。
+### 弹窗渲染
+- CSS animation 绑定在元素级别，`innerHTML` 赋值 = 新 DOM → 动画重播
+- 所有 `open*()` 必须先写入 innerHTML 再移除 hidden 类
+
+### SQLite 方言转换（db.py）
+- `INSERT` 的 `VALUES (` 必须带空格
+- `INSERT IGNORE` → 自动转 `INSERT OR IGNORE`
+
+### 构建注意
+- `vite build` 产物输出到 `server/static/`，覆盖旧构建文件
+- 修改 `frontend/index.html`（源文件）后需重新构建，修改 `server/static/index.html`（产物）会被覆盖
