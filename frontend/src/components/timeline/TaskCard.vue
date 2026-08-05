@@ -16,6 +16,52 @@ const emit = defineEmits(['toggle', 'toggleSubtask', 'edit', 'delete', 'timerSta
 const scheduleStore = useScheduleStore()
 const toastStore = useToastStore()
 
+/* ── Timer ── */
+const timerSec = ref(0)
+const timerRunning = ref(false)
+let timerInterval = null
+
+function toggleTimer(e) {
+  e.stopPropagation()
+  if (timerRunning.value) {
+    clearInterval(timerInterval)
+    timerRunning.value = false
+  } else {
+    timerRunning.value = true
+    timerInterval = setInterval(() => {
+      timerSec.value++
+    }, 1000)
+  }
+}
+
+function resetTimer(e) {
+  e.stopPropagation()
+  clearInterval(timerInterval)
+  timerRunning.value = false
+  timerSec.value = 0
+}
+
+function fmtTimer(s) {
+  if (!s || s < 0) return '00:00:00'
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const sec = s % 60
+  return [h, m, sec].map(v => String(v).padStart(2, '0')).join(':')
+}
+
+/* ── Timer ratio for progress bar color ── */
+const timerRatio = computed(() => {
+  const dur = props.block.duration || 30
+  return timerSec.value / (dur * 60)
+})
+
+const timerColor = computed(() => {
+  if (timerRatio.value < 0.5) return 'var(--success)'
+  if (timerRatio.value < 0.9) return 'var(--accent)'
+  if (timerRatio.value < 1.2) return 'var(--warning)'
+  return 'var(--danger)'
+})
+
 const editing = ref(false)
 const editForm = ref({
   subject: '',
@@ -134,6 +180,20 @@ function handleDelete() {
           <div class="cp-fill" :style="{ width: subPct + '%', background: subGradient }"></div>
         </div>
         <span class="cp-text">{{ doneCount }}/{{ subCount }}</span>
+      </div>
+
+      <!-- Inline timer -->
+      <div class="card-timer">
+        <div class="ctimer-bar" v-if="timerRunning || timerSec > 0">
+          <div class="ctimer-fill" :style="{ width: Math.min(timerRatio * 100, 100) + '%', background: timerColor }"></div>
+        </div>
+        <span class="ctimer-display" :class="{ running: timerRunning }">{{ fmtTimer(timerSec) }}</span>
+        <div class="ctimer-btns">
+          <button class="ctimer-btn" :class="timerRunning ? 'pause' : 'play'" @click="toggleTimer">
+            {{ timerRunning ? '⏸' : '▶' }}
+          </button>
+          <button v-if="timerSec > 0" class="ctimer-btn reset" @click="resetTimer" title="重置">↺</button>
+        </div>
       </div>
     </div>
 
@@ -490,4 +550,70 @@ function handleDelete() {
 }
 
 .btn-secondary:hover { background: var(--border); }
+
+/* ── Inline timer ── */
+.card-timer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.ctimer-bar {
+  flex: 1;
+  height: 3px;
+  background: var(--bg-muted);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.ctimer-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width 1s linear, background 0.3s var(--ease-out);
+}
+
+.ctimer-display {
+  font-family: var(--font-data);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  min-width: 56px;
+  text-align: center;
+}
+
+.ctimer-display.running {
+  color: var(--success);
+  animation: timer-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes timer-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.ctimer-btns {
+  display: flex;
+  gap: 2px;
+}
+
+.ctimer-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.ctimer-btn.play { color: var(--success); }
+.ctimer-btn.play:hover { background: var(--success-bg); }
+.ctimer-btn.pause { color: var(--warning); }
+.ctimer-btn.pause:hover { background: var(--warning-bg); }
+.ctimer-btn.reset { color: var(--text-muted); font-size: var(--text-xs); }
+.ctimer-btn.reset:hover { background: var(--bg-muted); color: var(--danger); }
 </style>
