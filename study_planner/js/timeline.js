@@ -261,7 +261,7 @@ function renderTimeline() {
 
     var body;
     if (it.kind === 'fixed') {
-      var skinIcon = WAFER_SKINS[store.prefs.waferSkin || 'wafer'].icon;
+      var skinIcon = (WAFER_SKINS[store.prefs.waferSkin || 'wafer'] || {}).icon || '💎';
       var rw = it.wafers || (ROUTINE_REWARD * WAFER_VALUE);
       var rEarned = isEarned(store.currentDate, 'fixed_' + it.id);
       body =
@@ -269,7 +269,7 @@ function renderTimeline() {
           '<span class="tl-r-icon">' + it.icon + '</span>' +
           '<div class="tl-r-info"><div class="tl-r-label">' + escapeHtml(it.label) + '<span class="tl-kind">固定</span></div>' +
           (it.note ? '<div class="tl-r-note">' + escapeHtml(it.note) + '</div>' : '') + '</div>' +
-          '<span class="wafer-reward' + (rEarned ? ' done' : '') + '">' + skinIcon + ' ' + (rEarned ? '已获得' : '+' + rw + '円') + '</span>' +
+          '<span class="wafer-reward' + (rEarned ? ' done' : '') + '">' + skinIcon + ' ' + (rEarned ? '已获得' : '+' + rw + ' XP') + '</span>' +
           '<span class="tl-r-check">✓</span>' +
         '</div>' +
         '<button class="tl-del-btn" onclick="tlDeleteTask(event,\'' + it.id + '\',\'fixed\')" title="移除此项">✕</button>';

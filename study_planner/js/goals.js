@@ -500,7 +500,7 @@ function removeGoalConfirm(id) {
   renderCountdownMenu();
 }
 
-/* ── 里程碑勾选（含晶圆正反馈） ─────────── */
+/* ── 里程碑勾选（含 XP 正反馈） ─────────── */
 
 function toggleMilestone(goalId, phaseId, msId, el) {
   var g = getBigGoal(goalId);
@@ -516,7 +516,7 @@ function toggleMilestone(goalId, phaseId, msId, el) {
       if (ms[j].done) {
         addBalance(GOAL_MS_REWARD);
         recordTransaction('earn', GOAL_MS_REWARD, '里程碑达成「' + ms[j].text.slice(0, 24) + '」', msId);
-        toast('🎉 里程碑达成！+' + GOAL_MS_REWARD + '円', 'ok');
+        toast('🎉 里程碑达成！+' + GOAL_MS_REWARD + ' XP', 'ok');
       } else {
         setBalance(Math.max(0, getBalance() - GOAL_MS_REWARD));
         recordTransaction('spend', GOAL_MS_REWARD, '里程碑撤销「' + ms[j].text.slice(0, 24) + '」', msId);

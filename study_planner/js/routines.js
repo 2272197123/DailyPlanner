@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════
    routines.js — 固定事务管理器（v8.1）
 
-   用户可自行增删改每日固定事务：名称、备注、用时、晶圆数。
+   用户可自行增删改每日固定事务：名称、备注、用时、XP数。
    预设保存到 dp_routines / 服务器 state key "routines"。
    固定事务与目标任务在时间轴中统一排序、统一渲染，仅视觉区分。
 
@@ -40,7 +40,7 @@ function migrateFixedTasks() {
       name:    nm,
       note:    r.note || '',
       duration: d,
-      wafers:  ROUTINE_REWARD * WAFER_VALUE,  // 默认 50 円
+      wafers:  ROUTINE_REWARD * WAFER_VALUE,  // 默认 50 XP
       icon:    r.icon || '🔁',
       category: 'life',
       priority: 'low',
@@ -214,7 +214,7 @@ function saveRoutineForm() {
       icon:     rows[i].querySelector('.r-icon-btn').textContent.trim() || '🔁',
       name:     name,
       duration: duration,
-      wafers:   ROUTINE_REWARD * WAFER_VALUE,  // 固定 50 円
+      wafers:   ROUTINE_REWARD * WAFER_VALUE,  // 固定 50 XP
       note:     rows[i].querySelector('.r-note').value.trim(),
       category: 'life',
       priority: 'low',
@@ -337,7 +337,7 @@ function toggleFixedTask(id) {
       setBalance(Math.max(0, getBalance() - reward));
       recordTransaction('spend', reward, '撤销固定事务: ' + (ft ? ft.name : id), earnedKey);
       unmarkEarned(store.currentDate, earnedKey);
-      toast('已撤销，退回 ' + reward + ' 円', 'ok');
+      toast('已撤销，退回 ' + reward + ' XP', 'ok');
     }
   }
   renderTimeline();

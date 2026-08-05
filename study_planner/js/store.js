@@ -199,3 +199,9 @@ function addBalance(amount, date, id) {
   }
   API.setBalance(nb).catch(function(){});
 }
+
+/** 完成任务发放 XP 奖励（v9.0 晶圆 → XP） */
+function awardTaskReward(task, id) {
+  var reward = calcTaskReward(task) * WAFER_VALUE;
+  addBalance(reward, store.currentDate, id);
+}

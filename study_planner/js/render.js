@@ -274,7 +274,7 @@ function renderCard(task) {
 
   var reward = calcTaskReward(task) * WAFER_VALUE;
   var earned = isEarned(store.currentDate, tid);
-  var skinIcon = WAFER_SKINS[store.prefs.waferSkin || 'wafer'].icon;
+  var skinIcon = (WAFER_SKINS[store.prefs.waferSkin || 'wafer'] || {}).icon || '💎';
 
   // 用时（分钟 → 人性化显示）
   var durMin = task.duration || (task.time ? dur(task.time) : 0);
