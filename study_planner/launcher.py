@@ -37,7 +37,7 @@ def run_fastapi():
     from server.main import app
 
     url = f"http://localhost:{PORT}/"
-    print(f"  DailyPlan v8.0 — FastAPI 模式")
+    print(f"  DailyPlan v10.0 — FastAPI 模式 (Vue 3 SPA)")
     print(f"  {url}")
     print(f"  数据: {ROOT / 'server' / 'dailyplan.db'}")
     threading.Thread(target=open_browser, args=(url,), daemon=True).start()
@@ -63,16 +63,27 @@ def run_static():
 
         def do_GET(self):
             if self.path in ('/', '/index.html'):
+                # Serve Vue 3 SPA first if available
+                spa_path = BASE.parent / 'server' / 'static' / 'index.html'
+                if spa_path.exists():
+                    self.path = '/index.html'
+                    self.directory = str(spa_path.parent)
+                    return super().do_GET()
                 self.path = '/index_modular.html'
             return super().do_GET()
 
         def do_HEAD(self):
             if self.path in ('/', '/index.html'):
+                spa_path = BASE.parent / 'server' / 'static' / 'index.html'
+                if spa_path.exists():
+                    self.path = '/index.html'
+                    self.directory = str(spa_path.parent)
+                    return super().do_HEAD()
                 self.path = '/index_modular.html'
             return super().do_HEAD()
 
     url = f"http://localhost:{PORT}/index_modular.html"
-    print(f"  DailyPlan v8.0 — 静态回退模式（未安装 fastapi/uvicorn，数据仅存浏览器）")
+    print(f"  DailyPlan v10.0 — 静态回退模式（未安装 fastapi/uvicorn，数据仅存浏览器）")
     print(f"  {url}")
     threading.Thread(target=open_browser, args=(url,), daemon=True).start()
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)

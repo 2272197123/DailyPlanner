@@ -67,13 +67,21 @@ def startup():
 @app.get("/")
 async def root():
     # v10.0: Serve Vue 3 SPA build output if available, else fall back to old frontend
-    spa_index = STATIC_DIR / "index.html"
+    spa_index = STATIC_DIR.parent / "server" / "static" / "index.html"
     if spa_index.exists():
         return FileResponse(str(spa_index))
     return FileResponse(str(STATIC_DIR / "index_modular.html"))
 
 
 @app.get("/index.html")
+async def spa_fallback():
+    # Vue 3 SPA client-side routing fallback
+    spa_index = STATIC_DIR.parent / "server" / "static" / "index.html"
+    if spa_index.exists():
+        return FileResponse(str(spa_index))
+    return FileResponse(str(STATIC_DIR / "index_modular.html"))
+
+
 @app.get("/index_modular.html")
 async def index_page():
     return FileResponse(str(STATIC_DIR / "index_modular.html"))
@@ -84,7 +92,7 @@ async def index_page():
 async def no_cache_static(request, call_next):
     resp = await call_next(request)
     p = request.url.path
-    if p.startswith(("/js", "/css")) or p in ("/", "/index.html", "/index_modular.html"):
+    if p.startswith(("/js", "/css", "/assets")) or p in ("/", "/index.html", "/index_modular.html"):
         resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         resp.headers["Pragma"] = "no-cache"
     return resp
