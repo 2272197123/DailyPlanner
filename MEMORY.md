@@ -4,3 +4,5 @@
 - [AI 面板设计](C:\Users\Ahsoka·Tano\.claude\projects\C--Users-Ahsoka-Tano-Desktop-DailyPlan\memory\ai-panel-design.md) — 单一入口 + 智能上下文切换 + 数据锚点防遗忘
 - [任务卡片编辑始终可见](C:\Users\Ahsoka·Tano\.claude\projects\C--Users-Ahsoka-Tano-Desktop-DailyPlan\memory\task-card-edit-always-visible.md) — generated 标记不再隐藏功能入口
 - [v9.0 重构完成总结](C:\Users\Ahsoka·Tano\.claude\projects\C--Users-Ahsoka-Tano-Desktop-DailyPlan\memory\v9-refactor-complete.md) — 8个子任务完成 + Git初始化 + Code-Spec更新
+- [v9.0 最终状态](C:\Users\Ahsoka·Tano\.claude\projects\C--Users-Ahsoka-Tano-Desktop-DailyPlan\memory\v9-final-status.md) — 代码规模、数据库、Git 状态
+- [v9.0 已知问题](C:\Users\Ahsoka·Tano\.claude\projects\C--Users-Ahsoka-Tano-Desktop-DailyPlan\memory\v9-known-issues.md) — 待修复问题清单
