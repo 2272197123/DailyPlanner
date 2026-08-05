@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 title DailyPlan v10.0
 cd /d "%~dp0study_planner"
 
@@ -9,7 +10,6 @@ echo.
 echo   DO NOT CLOSE THIS WINDOW.
 echo.
 
-start http://localhost:5000
 python launcher.py
 
 pause
