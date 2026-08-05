@@ -66,6 +66,10 @@ def startup():
 
 @app.get("/")
 async def root():
+    # v10.0: Serve Vue 3 SPA build output if available, else fall back to old frontend
+    spa_index = STATIC_DIR / "index.html"
+    if spa_index.exists():
+        return FileResponse(str(spa_index))
     return FileResponse(str(STATIC_DIR / "index_modular.html"))
 
 
@@ -462,6 +466,9 @@ async def api_save_chat_history(date: str, body: dict):
     return {"ok": True, "message": "已保存"}
 
 
-# ── 静态文件挂载 ──
-app.mount("/js",  StaticFiles(directory=str(STATIC_DIR / "js")),  name="js")
-app.mount("/css", StaticFiles(directory=str(STATIC_DIR / "css")), name="css")
+# ── 静态文件挂载（v10.0: Vue 3 build assets + legacy compatibility） ──
+_vue_assets = STATIC_DIR.parent / "server" / "static" / "assets"
+if _vue_assets.exists():
+    app.mount("/assets", StaticFiles(directory=str(_vue_assets)), name="assets")
+app.mount("/js",     StaticFiles(directory=str(STATIC_DIR / "js")),     name="js")
+app.mount("/css",    StaticFiles(directory=str(STATIC_DIR / "css")),    name="css")
