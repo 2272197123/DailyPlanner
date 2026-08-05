@@ -1,22 +1,16 @@
 @echo off
-title DailyPlan · 启动
-echo.
-echo   ∿ DailyPlan v9.0
-echo   ═══════════════════
-echo.
-echo   正在启动...
+title DailyPlan - Start
+
+cd /d "%~dp0study_planner"
+
+echo DailyPlan v9.0
+echo Starting server...
 echo.
 
-cd /d "C:\Users\Ahsoka·Tano\Desktop\DailyPlan\study_planner"
+start /B python launcher.py
 
-:: Start Python server (launcher.py handles browser open + port)
-start "" /B python launcher.py
-
-echo   [OK] 服务器应该正在启动。
+echo Server starting at http://localhost:5000
 echo.
-echo   浏览器会自动打开。如果没有，请手动访问:
-echo   http://localhost:5000
-echo.
-echo   请勿关闭此窗口。关闭即停止服务器。
+echo DO NOT CLOSE THIS WINDOW.
 echo.
 pause
