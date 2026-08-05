@@ -1,3 +1,5 @@
+import { XP_LVL_BASE, XP_LVL_MULT } from './constants.js'
+
 /** Escape HTML to prevent XSS */
 export function escapeHtml(str) {
   if (!str) return ''
