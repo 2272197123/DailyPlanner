@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "DailyPlan",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["study_planner/launcher.py"],
+      "port": 5000, "autoPort": true
+    }
+  ]
+}

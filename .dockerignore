@@ -1,0 +1,31 @@
+# ═══════════════════════════════════════
+# Docker ignore — 不打包到镜像
+# ═══════════════════════════════════════
+
+# 环境（含 Key，本地独有）
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# 数据库文件（容器内用 PostgreSQL，不需要 SQLite）
+server/*.db
+server/*.db-shm
+server/*.db-wal
+
+# IDE
+.vscode/
+.idea/
+
+# Git
+.git/
+.gitignore
+
+# 其他
+*.md
+node_modules/
+*.log

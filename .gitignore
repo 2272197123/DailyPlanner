@@ -1,0 +1,26 @@
+# DailyPlan .gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+
+# Server data
+server/dailyplan.db
+server/dailyplan.db-shm
+server/dailyplan.db-wal
+
+# Environment
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Trellis runtime (session-scoped ephemera)
+.trellis/.runtime/

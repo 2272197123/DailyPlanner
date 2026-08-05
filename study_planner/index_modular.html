@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DailyPlan · 学习助手</title>
+
+<!-- ══ Typography ══ -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&family=Noto+Serif+SC:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/overlay-anim.css">
+<link rel="stylesheet" href="css/timeline.css">
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════
+   AMBIENT ATMOSPHERE — 墨穹 Ink Void
+   ═══════════════════════════════════════ -->
+
+<!-- SVG noise filter for paper texture -->
+<svg style="position:fixed;width:0;height:0;pointer-events:none" aria-hidden="true">
+  <filter id="noise-filter">
+    <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch"/>
+    <feColorMatrix type="saturate" values="0"/>
+    <feBlend in="SourceGraphic" mode="multiply" result="noise"/>
+  </filter>
+</svg>
+
+<!-- Ambient gradient orbs -->
+<div class="ambient-orb orb-1" aria-hidden="true"></div>
+<div class="ambient-orb orb-2" aria-hidden="true"></div>
+<div class="ambient-orb orb-3" aria-hidden="true"></div>
+
+<!-- Paper texture overlay -->
+<div class="paper-texture" aria-hidden="true"></div>
+
+<!-- Hanko seal — appears on completion -->
+<div class="hanko-seal hidden" id="hankoSeal" aria-hidden="true">
+  <svg viewBox="0 0 120 120" class="hanko-svg">
+    <circle cx="60" cy="60" r="54" fill="none" stroke="var(--red)" stroke-width="2.5"/>
+    <circle cx="60" cy="60" r="48" fill="none" stroke="var(--red)" stroke-width="0.8"/>
+    <text x="60" y="48" text-anchor="middle" fill="var(--red)" font-size="13" font-weight="900" font-family="var(--font-display)" letter-spacing="3">完成</text>
+    <text x="60" y="72" text-anchor="middle" fill="var(--red)" font-size="9" font-weight="700" font-family="var(--font-display)" letter-spacing="1">COMPLETE</text>
+  </svg>
+</div>
+
+<!-- ═══════════════════════════════════════
+   HEADER — topbar
+   ═══════════════════════════════════════ -->
+<header class="topbar">
+  <div class="topbar-left">
+    <span class="brand"><span class="logo">∿</span>DailyPlan</span>
+    <span class="topbar-date" id="headerDate">--</span>
+  </div>
+  <div class="topbar-right">
+    <span id="authBadge"></span>
+    <button class="theme-btn" id="themeToggle" onclick="toggleTheme()">🌓</button>
+    <div class="balance-display" onclick="openLedger()" title="点击查看晶圆明细">
+      <span class="balance-coin" id="balanceIcon">⭐</span><span id="balanceText">0 XP</span>
+    </div>
+    <div style="position:relative">
+      <div class="countdown-badge" onclick="toggleCountdownMenu(event)"><span id="cdIcon">📡</span><span id="cdText">--</span><span class="countdown-chevron">▾</span></div>
+      <div class="countdown-menu" id="countdownMenu"></div>
+    </div>
+    <div style="position:relative">
+      <button class="shop-btn topbar-more-btn" onclick="toggleMoreMenu(event)" title="更多功能">🧰</button>
+      <div class="more-menu" id="moreMenu">
+        <button class="more-item" onclick="openShop();toggleMoreMenu()">🏪 商城</button>
+        <button class="more-item" onclick="openAccounting();toggleMoreMenu()">📒 记账</button>
+        <button class="more-item" onclick="openArchive();toggleMoreMenu()">📦 存档</button>
+        <button class="more-item" onclick="openGoals();toggleMoreMenu()">🎯 目标</button>
+        <button class="more-item" onclick="openRoutines();toggleMoreMenu()">🔁 固定事务</button>
+        <button class="more-item" onclick="openApiConfig();toggleMoreMenu()">🔑 AI API</button>
+        <button class="more-item" onclick="openModeSettings();toggleMoreMenu()">⚙ 档位设置</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════
+   MAIN WORKSPACE
+   ═══════════════════════════════════════ -->
+<div id="appMain">
+
+<!-- ═══════════════════════════════════════
+   OVERLAYS
+   ═══════════════════════════════════════ -->
+
+<!-- FOCUS OVERLAY -->
+<div class="focus-overlay hidden" id="focusOverlay" onclick="closeFocusIfOverlay(event)"><div class="focus-card" id="focusCard"></div></div>
+
+<!-- SHOP OVERLAY -->
+<div class="shop-overlay hidden" id="shopOverlay" onclick="closeShopIfOverlay(event)">
+  <div class="shop-panel" id="shopPanel"></div>
+</div>
+
+<!-- LEDGER OVERLAY -->
+<div class="shop-overlay hidden" id="ledgerOverlay" onclick="closeLedgerIfOverlay(event)">
+  <div class="shop-panel" id="ledgerPanel"></div>
+</div>
+
+<!-- ACCOUNTING OVERLAY -->
+<div class="shop-overlay hidden" id="accountingOverlay" onclick="closeAccountingIfOverlay(event)">
+  <div class="shop-panel" id="accountingPanel"></div>
+</div>
+
+<!-- ROUTINES OVERLAY（每日固定任务管理，v7.1） -->
+<div class="shop-overlay hidden" id="routineOverlay" onclick="closeRoutinesIfOverlay(event)">
+  <div class="shop-panel routine-panel" id="routinePanel"></div>
+</div>
+
+<!-- ARCHIVE OVERLAY -->
+<div class="shop-overlay hidden" id="archiveOverlay" onclick="closeArchiveIfOverlay(event)">
+  <div class="shop-panel" id="archivePanel"></div>
+</div>
+
+<!-- GOALS OVERLAY（长期目标管理，v7.0） -->
+<div class="shop-overlay hidden" id="goalOverlay" onclick="closeGoalsIfOverlay(event)">
+  <div class="shop-panel goal-panel" id="goalPanel"></div>
+</div>
+
+<!-- MODE OVERLAY（三档位设置，v7.1） -->
+<div class="shop-overlay hidden" id="modeOverlay" onclick="closeModeSettingsIfOverlay(event)">
+  <div class="shop-panel mode-panel" id="modePanel"></div>
+</div>
+
+<!-- AUTH OVERLAY（登录/注册，v8.0） -->
+<div class="shop-overlay hidden" id="authOverlay" onclick="closeAuthIfOverlay(event)">
+  <div class="shop-panel auth-panel" id="authPanel"></div>
+</div>
+
+<!-- API CONFIG OVERLAY（用户 API Key，v8.0） -->
+<div class="shop-overlay hidden" id="apiConfigOverlay" onclick="closeApiConfigIfOverlay(event)">
+  <div class="shop-panel apicfg-panel" id="apiConfigPanel"></div>
+</div>
+
+<!-- IMPORT OVERLAY（导入计划 / AI 生成，v8.0） -->
+<div class="shop-overlay hidden" id="importOverlay" onclick="closeImportIfOverlay(event)">
+  <div class="shop-panel import-panel" id="importPanel"></div>
+</div>
+
+<!-- ═══════════════════════════════════════
+   MAIN CONTAINER
+   ═══════════════════════════════════════ -->
+<div id="appWrap" class="container fade-in">
+
+  <div class="controls-row">
+    <button class="nav-btn" onclick="navDay(-1)">←</button>
+    <h2 class="date-title" id="dateTitle">--</h2>
+    <button class="nav-btn" onclick="navDay(1)">→</button>
+    <button class="nav-btn btn-today" onclick="goToday()">今天</button>
+    <div class="mode-segmented" id="modeSeg"></div>
+    <button class="nav-btn nav-btn-mode-settings" onclick="openModeSettings()" title="自定义三档位">⚙</button>
+    <span class="controls-sep"></span>
+    <button class="nav-btn nav-btn-primary" onclick="openQuickImport()" title="导入计划 / AI 生成">📥 导入</button>
+    <button class="nav-btn" onclick="openTaskModal()">＋ 新任务</button>
+    <button class="nav-btn" onclick="openRoutines()" title="管理每日固定事务">🔁 固定事务</button>
+    <button class="nav-btn nav-btn-reset" id="btnResetDay" onclick="resetToday()" title="重置今日">🔄 重置</button>
+  </div>
+
+  <div class="hero-progress" id="heroProgress"></div>
+  <div class="encouragement" id="encouragement"></div>
+
+  <div class="section-header"><h3>🎯 长期目标</h3><span class="section-count" id="goalBoardCount"></span></div>
+  <div class="goal-board" id="goalBoard"></div>
+
+  <div class="section-header"><h3>🕘 今日时间轴</h3><span class="section-count" id="timelineCount"></span></div>
+  <div class="timeline-bar" id="timelineBar"></div>
+  <div class="timeline" id="timeline"></div>
+  <div class="empty-state" id="emptyState" style="display:none"><div class="empty-icon">📋</div><p class="empty-title">还没有任务</p></div>
+
+  <div class="bottom-panels">
+    <div class="panel panel-feedback">
+      <h4>💭 今日反馈</h4>
+      <textarea id="feedbackInput" placeholder="今天完成了什么？有什么困难？"></textarea>
+      <div class="panel-stars"><span class="stars-label">今日状态:</span><span class="stars" id="starRow"></span></div>
+      <div class="panel-actions"><button class="btn-primary" onclick="sendFeedback()">💾 保存</button></div>
+    </div>
+  </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════
+   MODAL
+   ═══════════════════════════════════════ -->
+<div class="modal-overlay hidden" id="modalOverlay" onclick="closeModalIfOverlay(event)">
+  <div class="modal">
+    <h3 id="modalTitle">新建任务</h3>
+    <input type="hidden" id="modalTaskId">
+    <div class="field"><label>任务名称 *</label><input type="text" id="modalTitleInput" placeholder="输入任务名称..." maxlength="200"></div>
+    <div class="field-row"><div class="field"><label>分类</label><select id="modalCategory"><option value="study">📚 学习</option><option value="work">💼 工作</option><option value="life">🏠 生活</option><option value="health">💪 健康</option><option value="review">📝 复盘</option><option value="other">📌 其他</option></select></div><div class="field"><label>优先级</label><select id="modalPriority"><option value="medium">🟡 中</option><option value="high">🔴 高</option><option value="low">🟢 低</option></select></div></div>
+    <div class="field"><label>关联目标</label><select id="modalGoal"><option value="">（不关联目标）</option></select></div>
+    <div class="field-row"><div class="field"><label>时间段</label><input type="text" id="modalTime" placeholder="如: 08:00-09:30"></div><div class="field"><label>截止日期</label><input type="date" id="modalDueDate"></div></div>
+    <div class="field"><label>截止时间</label><input type="time" id="modalDueTime"></div>
+    <div class="field"><label>预计耗时（分钟）</label><input type="number" id="modalDuration" placeholder="留空则自动计算" min="1" max="480" style="width:110px"></div>
+    <div class="field"><label>心流启动提示</label><input type="text" id="modalFlowHint" placeholder="具体的第一动作指令"></div>
+    <div class="field"><label>子任务</label><div id="subtaskEditor"></div><button class="btn-add-sub" onclick="addSubtaskField()">＋ 添加子任务</button></div>
+    <div class="field"><label>备注</label><textarea id="modalNote" placeholder="可选备注..."></textarea></div>
+    <div class="field"><label><input type="checkbox" id="modalReminder" style="width:auto;margin-right:5px">启用截止提醒</label></div>
+    <div class="modal-actions"><button class="btn-cancel" onclick="closeModal()">取消</button><button class="btn-save" onclick="saveTask()">保存</button></div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<!-- ═══════════════════════════════════════
+   MODULE LOAD ORDER (dependency-aware)
+   ═══════════════════════════════════════ -->
+<!-- Layer 0: constants (zero deps) -->
+<script src="js/constants.js"></script>
+<!-- Layer 1: pure utilities -->
+<script src="js/utils.js"></script>
+<!-- Layer 2: API client (backend communication) -->
+<script src="js/api.js"></script>
+<!-- Layer 3: storage wrapper -->
+<script src="js/storage.js"></script>
+<!-- Layer 4: central state store (reads LS + API) -->
+<script src="js/store.js"></script>
+<!-- Layer 5: business logic modules -->
+<script src="js/schedule.js"></script>
+<script src="js/currency.js"></script>
+<script src="js/archive.js"></script>
+<script src="js/goals.js"></script>
+<script src="js/routines.js"></script>
+<script src="js/modes.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/apiconfig.js"></script>
+<script src="js/toast.js"></script>
+<script src="js/timers.js"></script>
+<script src="js/toggles.js"></script>
+<script src="js/theme.js"></script>
+<script src="js/reminders.js"></script>
+  <script src="js/effects.js"></script>
+  <script src="js/ai.js"></script>
+<!-- Layer 6: UI modules (read store, write DOM) -->
+<script src="js/render.js"></script>
+<script src="js/timeline.js"></script>
+<script src="js/events.js"></script>
+<script src="js/modal.js"></script>
+<script src="js/overlay-anim.js"></script>
+<script src="js/import.js"></script>
+<script src="js/ledger.js"></script>
+<!-- Layer 7: entry point (async init) -->
+<script src="js/app.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,84 @@
+# ═══════════════════════════════════════
+# DailyPlan Docker Compose（v8.0）
+#
+# 启动: docker compose up -d
+# 停止: docker compose down
+# 查看日志: docker compose logs -f app
+#
+# 默认数据库: PostgreSQL（生产推荐）
+# 开发模式: 设 DP_DB_TYPE=sqlite 并注释 db 服务
+# ═══════════════════════════════════════
+
+version: "3.9"
+
+services:
+  # ── FastAPI 应用服务 ──
+  app:
+    build: .
+    container_name: dailyplan-app
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      # 数据库
+      - DP_DB_TYPE=postgres
+      - DP_POSTGRES_HOST=db
+      - DP_POSTGRES_PORT=5432
+      - DP_POSTGRES_USER=dailyplan
+      - DP_POSTGRES_PASSWORD=${DB_PASSWORD:-dailyplan}
+      - DP_POSTGRES_DB=dailyplan
+      # AI（填入你的 Key）
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      # 安全
+      - DP_SECRET_KEY=${DP_SECRET_KEY:-change-me-in-production}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - dailyplan-net
+
+  # ── PostgreSQL 数据库 ──
+  db:
+    image: postgres:16-alpine
+    container_name: dailyplan-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=dailyplan
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-dailyplan}
+      - POSTGRES_DB=dailyplan
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dailyplan"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dailyplan-net
+
+  # ── Nginx 反向代理（可选，需要 HTTPS 时启用） ──
+  nginx:
+    image: nginx:alpine
+    container_name: dailyplan-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      # 证书目录（生产环境挂载真实证书）
+      # - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - app
+    networks:
+      - dailyplan-net
+    profiles:
+      - production  # 仅 production profile 时启用
+
+volumes:
+  pgdata:
+
+networks:
+  dailyplan-net:
+    driver: bridge

@@ -1,0 +1,5 @@
+{"file":"study_planner/js/constants.js","reason":"Changed ACCOUNTING_CATEGORIES from const to var, set empty defaults"}
+{"file":"study_planner/js/storage.js","reason":"Added getAccountingRangeDetail, getAccountingCategories, saveAccountingCategories, replaced const/let with var"}
+{"file":"study_planner/js/ledger.js","reason":"Complete rewrite: period filtering, pie/bar charts (Canvas), entry CRUD, category management, escapeHtml"}
+{"file":"study_planner/js/overlay-anim.js","reason":"Updated openAccounting overlay to initialize all new state variables"}
+{"file":"study_planner/css/style.css","reason":"Added styles for period bar, summary cards, charts, section headers, category management pane"}

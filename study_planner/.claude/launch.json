@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "study-planner",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["launcher.py"],
+      "port": 5000
+    }
+  ]
+}

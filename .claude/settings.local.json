@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(taskkill /f /im python.exe)",
+      "Bash(python -m http.server 8765)",
+      "Bash(python -m http.server 8766)",
+      "Bash(taskkill /f /im python3.exe)",
+      "Bash(rm -rf build __pycache__ StudyPlanner.exe StudyPlanner.spec 学习助手.spec build.bat build_exe.py 打包为exe.bat 启动学习助手.pyw app.py dashboard.html)",
+      "Bash(rm -rf dist)",
+      "Bash(cd \"C:/Users/Ahsoka·Tano/Desktop/DailyPlan\" && rm -rf \".claude\" \"通信原理简明教程/考试卷子/extracted\" && ls study_planner/)",
+      "Bash(rm -rf \"C:/Users/Ahsoka·Tano/Desktop/DailyPlan/study_planner/dist\" 2>/dev/null; rm -rf \"C:/Users/Ahsoka·Tano/Desktop/DailyPlan/study_planner/schedules.json\" 2>/dev/null; rm -rf \"C:/Users/Ahsoka·Tano/Desktop/DailyPlan/.claude\" 2>/dev/null; echo \"done\")",
+      "Bash(taskkill /f /im python.exe 2>/dev/null; taskkill /f /im python3.exe 2>/dev/null; sleep 1; rm -rf \"C:/Users/Ahsoka·Tano/Desktop/DailyPlan/study_planner/dist\" 2>/dev/null; rm -rf \"C:/Users/Ahsoka·Tano/Desktop/DailyPlan/.claude\" 2>/dev/null; echo \"cleaned\")",
+      "Bash(rmdir \"\\\\\\\\\\\\?\\\\C:\\\\Users\\\\Ahsoka·Tano\\\\Desktop\\\\DailyPlan\\\\study_planner\\\\dist\" 2>/dev/null || echo \"dist dir likely a mount point, skipping\"; ls \"C:/Users/Ahsoka·Tano/Desktop/DailyPlan/study_planner/\")",
+      "Bash(cmd.exe /c \"rmdir /s /q C:\\\\Users\\\\Ahsoka·Tano\\\\Desktop\\\\DailyPlan\\\\study_planner\\\\dist\")",
+      "Bash(echo \"exit: $?\")",
+      "Bash(rmdir \"C:\\\\Users\\\\Ahsoka·Tano\\\\Desktop\\\\DailyPlan\\\\.claude\" 2>/dev/null; echo \"done\")",
+      "Bash(cmd.exe /c \"rmdir /s /q \\\\\"C:\\\\Users\\\\Ahsoka·Tano\\\\Desktop\\\\DailyPlan\\\\study_planner\\\\dist\\\\\"\")",
+      "Bash(python -m http.server 8000)"
+    ]
+  }
+}

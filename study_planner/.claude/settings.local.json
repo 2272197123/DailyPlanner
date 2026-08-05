@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python launcher.py)",
+      "Bash(taskkill //F //IM python.exe)",
+      "Bash(python -m http.server 5000)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5000/index.html)",
+      "Bash(taskkill //F //IM StudyPlanner.exe)"
+    ]
+  }
+}
