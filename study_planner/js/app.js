@@ -87,6 +87,10 @@ async function init() {
   startClock();
   store._tlFresh = true; // 首次渲染触发时间轴入场级联
   renderAll();
+
+  // v9.0：初始化 AI 助手抽屉（必须在 renderAll 之后，确保 DOM 就绪）
+  if (typeof initAiDrawer === 'function') initAiDrawer();
+
   requestNotif();
   scheduleReminderCheck();
   startArchiveTick();
@@ -99,9 +103,6 @@ async function init() {
 
   // Attach keyboard shortcuts
   document.addEventListener('keydown', keyHandler);
-
-  // v9.0：初始化 AI 助手抽屉
-  if (typeof initAiDrawer === 'function') initAiDrawer();
 
   // Periodic refresh for clock + progress (every 30s)
   setInterval(function() {

@@ -322,7 +322,7 @@ async def api_save_order(date: str, body: dict):
 
 
 # ═══════════════════════════════════════
-# 长期目标 API（v7.0：用户自定义大目标 + AI 阶段拆解）
+# 长期目标 API（v9.0：过滤旧硬编码数据）
 # ═══════════════════════════════════════
 
 @app.get("/api/goals")
@@ -332,7 +332,12 @@ async def api_get_goals():
         data = json.loads(v) if v else []
     except Exception:
         data = []
-    return {"ok": True, "data": data}
+    # v9.0 安全过滤器：移除已知的旧硬编码 ID
+    _STALE_IDS = {'g_toefl', 'g_n2', 'g_comm-exam', 'comm-exam'}
+    filtered = [g for g in data if g.get('id', '') not in _STALE_IDS]
+    if len(filtered) != len(data):
+        set_state("biggoals", json.dumps(filtered, ensure_ascii=False))
+    return {"ok": True, "data": filtered}
 
 
 @app.put("/api/goals")
