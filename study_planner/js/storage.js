@@ -125,11 +125,14 @@ function canSwitchMode(date, newMode) {
  * Called whenever a task/routine is toggled.
  */
 function saveDailyHistory(date) {
-  const sched = LS.get('schedules', {});
-  const rp = LS.get('routineProgress', {});
-  const balance = LS.get('balance', 0);
-  const todaySched = sched[date] || {};
-  const todayRP = rp[date] || {};
+  /* v10.0: Read routines from daily data copy, not global LS key */
+  var dd = typeof getDailyData === 'function' ? getDailyData(date) : null;
+  var routines = (dd && dd.routines) ? dd.routines : (LS.get('routines', []));
+  var rp = LS.get('routineProgress', {});
+  var balance = LS.get('balance', 0);
+  var todaySched = LS.get('schedules', {});
+  var todayRP = rp[date] || {};
+  var todaySchedDate = todaySched[date] || {};
 
   // Count completions
   var routines = LS.get('routines', []);

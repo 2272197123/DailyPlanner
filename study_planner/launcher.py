@@ -63,8 +63,11 @@ def run_static():
 
         def do_GET(self):
             if self.path in ('/', '/index.html'):
+                # Serve Vue 3 SPA first if available
                 spa_path = BASE.parent / 'server' / 'static' / 'index.html'
                 if spa_path.exists():
+                    # Serve the file directly instead of switching directory (breaks path handling)
+                    from http.server import SimpleHTTPRequestHandler
                     self.send_response(200)
                     self.send_header('Content-Type', 'text/html; charset=utf-8')
                     self.end_headers()
@@ -73,6 +76,7 @@ def run_static():
                     return
                 self.path = '/index_modular.html'
             elif self.path.startswith('/assets/'):
+                # Serve Vue 3 SPA assets
                 spa_asset = BASE.parent / 'server' / 'static' / self.path.lstrip('/')
                 if spa_asset.exists():
                     self.send_response(200)
@@ -90,10 +94,9 @@ def run_static():
             if self.path in ('/', '/index.html'):
                 spa_path = BASE.parent / 'server' / 'static' / 'index.html'
                 if spa_path.exists():
-                    self.send_response(200)
-                    self.send_header('Content-Type', 'text/html; charset=utf-8')
-                    self.end_headers()
-                    return
+                    self.path = '/index.html'
+                    self.directory = str(spa_path.parent)
+                    return super().do_HEAD()
                 self.path = '/index_modular.html'
             return super().do_HEAD()
 

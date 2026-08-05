@@ -6,6 +6,9 @@
 /* XP 系统常量（替换旧晶圆 WAFER 系统） */
 var XP_LVL_BASE = 100;
 var XP_LVL_MULT = 1.5;
+var WAFER_VALUE = 5;       // XP 每奖励单位乘数（向后兼容旧 wafer 引用）
+var ROUTINE_REWARD = 10;   // 日课完成 XP（10*5 = 50 XP）
+var GOAL_MS_REWARD = 100;  // 里程碑达成 XP
 
 /* v7.0 通用分类。仅保留通用分类，旧用户特定分类移除。 */
 var CAT_EMOJI = {study:'📚', work:'💼', life:'🏠', health:'💪', review:'📝', other:'📌'};

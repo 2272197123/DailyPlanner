@@ -478,5 +478,5 @@ async def api_save_chat_history(date: str, body: dict):
 _vue_assets = STATIC_DIR.parent / "server" / "static" / "assets"
 if _vue_assets.exists():
     app.mount("/assets", StaticFiles(directory=str(_vue_assets)), name="assets")
-app.mount("/js",  StaticFiles(directory=str(STATIC_DIR / "js")),  name="js")
-app.mount("/css", StaticFiles(directory=str(STATIC_DIR / "css")), name="css")
+app.mount("/js",     StaticFiles(directory=str(STATIC_DIR / "js")),     name="js")
+app.mount("/css",    StaticFiles(directory=str(STATIC_DIR / "css")),    name="css")

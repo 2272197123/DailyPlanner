@@ -101,8 +101,8 @@ docker compose --profile production up -d
 
 ### 晶圆货币
 
-- 任务奖励：`min(round(duration/5), 20) × 10` 円
-- 日常项奖励：50 円
+- 任务奖励：`min(round(duration/5), 20) × 5` XP
+- 日常项奖励：50 XP
 - 防刷：每日每项仅一次（`dp_earned_<date>` 跟踪）
 - 明细：点击顶栏余额打开账本
 
@@ -115,7 +115,7 @@ docker compose --profile production up -d
 ### 长期目标系统（v7.0）
 
 - 用户自定义大目标（标题/图标/截止日期/阶段/里程碑）
-- 目标面板：进度条、阶段 stepper、里程碑勾选（+100 円奖励）
+- 目标面板：进度条、阶段 stepper、里程碑勾选（+100 XP奖励）
 - AI 内置聊天拆解阶段 + 生成每日任务（按档位/每日上限裁剪）
 - 每日任务卡片关联目标徽章
 

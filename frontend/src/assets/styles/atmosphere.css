@@ -1,0 +1,91 @@
+/* ═══════════════════════════════════════
+   atmosphere.css  — Ambient elements (光晕/纹理/虚光/印章)
+   Pure CSS, no JS awareness. NEVER remove these.
+   ═══════════════════════════════════════ */
+
+/* ── Gradient orbs ── */
+.ambient-orb {
+  position: fixed;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  filter: blur(120px);
+  opacity: 0.25;
+  transition: opacity var(--transition-slow, 0.3s ease);
+}
+.orb-1 {
+  width: 600px; height: 600px;
+  background: radial-gradient(circle, rgba(106, 90, 205, 0.5) 0%, transparent 70%);
+  top: -200px; right: -150px;
+}
+.orb-2 {
+  width: 500px; height: 500px;
+  background: radial-gradient(circle, rgba(45, 122, 82, 0.4) 0%, transparent 70%);
+  bottom: -150px; left: -120px;
+}
+.orb-3 {
+  width: 350px; height: 350px;
+  background: radial-gradient(circle, rgba(194, 59, 42, 0.3) 0%, transparent 70%);
+  top: 40%; left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* ── Paper texture overlay ── */
+.paper-texture {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.018;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px 256px;
+}
+
+/* ── Ink-wash vignette ── */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(26, 26, 28, 0.03) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 100%, rgba(26, 26, 28, 0.02) 0%, transparent 50%);
+}
+
+/* ── Hanko seal (bottom-right watermark) ── */
+.hanko-seal {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 48px;
+  height: 48px;
+  pointer-events: none;
+  z-index: 3;
+  opacity: 0.12;
+  border: 2px solid var(--accent, #1e2030);
+  border-radius: 4px;
+  transform: rotate(8deg);
+}
+.hanko-seal::after {
+  content: '∿';
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-family: var(--font-heading, serif);
+  font-size: 20px;
+  color: var(--accent, #1e2030);
+}
+
+/* ── Dark mode adjustments ── */
+[data-theme="dark"] .paper-texture {
+  opacity: 0.012;
+}
+[data-theme="dark"] body::after {
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(200, 196, 224, 0.04) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 100%, rgba(200, 196, 224, 0.03) 0%, transparent 50%);
+}

@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════
    routines.js — 固定事务管理器（v8.1）
 
-   用户可自行增删改每日固定事务：名称、备注、用时、晶圆数。
+   用户可自行增删改每日固定事务：名称、备注、用时、XP数。
    预设保存到 dp_routines / 服务器 state key "routines"。
    固定事务与目标任务在时间轴中统一排序、统一渲染，仅视觉区分。
 
@@ -40,7 +40,7 @@ function migrateFixedTasks() {
       name:    nm,
       note:    r.note || '',
       duration: d,
-      wafers:  ROUTINE_REWARD * WAFER_VALUE,  // 默认 50 円
+      wafers:  ROUTINE_REWARD * WAFER_VALUE,  // 默认 50 XP
       icon:    r.icon || '🔁',
       category: 'life',
       priority: 'low',
@@ -98,22 +98,25 @@ function closeRoutinesIfOverlay(e) {
 
 function _renderRoutinePanel() {
   var panel = document.getElementById('routinePanel');
+  /* v10.0: Read routines from daily data copy for current panel display */
+  var dd = typeof getDailyData === 'function' ? getDailyData(store.currentDate) : null;
+  var displayRoutines = (dd && dd.routines && dd.routines.length) ? dd.routines : (store.routines || []);
   var html = '<div class="arch-head">' +
     '<h3>🔁 每日固定事务</h3>' +
-    '<span class="arch-sub">' + (store.routines || []).length + ' 项 · 拖拽每行左侧 ⋮⋮ 即可排序</span>' +
+    '<span class="arch-sub">' + displayRoutines.length + ' 项 · 拖拽每行左侧 ⋮⋮ 即可排序</span>' +
     '<button class="btn-secondary" onclick="loadRoutineTemplate()">📄 加载示例</button>' +
     '<span class="focus-close" onclick="closeRoutines()">✕</span></div>';
 
   html += '<div class="r-list" id="rList">';
-  var routines = store.routines || [];
-  for (var i = 0; i < routines.length; i++) {
-    html += _routineRowHTML(i, routines[i]);
+  for (var i = 0; i < displayRoutines.length; i++) {
+    html += _routineRowHTML(i, displayRoutines[i]);
   }
   html += '</div>';
 
   html += '<div class="r-actions">' +
     '<button class="btn-add-sub" onclick="addRoutineField()">＋ 添加固定事务</button>' +
-    '<button class="btn-primary" onclick="saveRoutineForm()">💾 保存预设</button>' +
+    '<button class="btn-primary" onclick="saveRoutineForm()">💾 保存当天副本</button>' +
+    '<button class="btn-secondary" onclick="pushRoutinesToTemplate()" title="将当天修改同步到全局模板，仅影响未来新日期">📤 推送至模板</button>' +
     '</div>';
 
   html += '<div class="r-tip">💡 每个日期的日课副本独立存储。修改仅影响今天；推送至模板后，新日期使用此预设。</div>';
@@ -130,7 +133,7 @@ function _routineRowHTML(i, r) {
     '<button class="r-icon-btn" onclick="_openIconPicker(this,' + i + ')" title="选择图标">' + icon + '</button>' +
     '<input type="text" class="r-name" value="' + escapeHtml(r.name || '') + '" placeholder="名称，如 早餐" title="名称">' +
     '<input type="number" class="r-duration" value="' + (r.duration || '') + '" placeholder="分钟" title="用时（分钟）" style="width:70px">' +
-    '<span class="r-wafers-fixed">💎 50</span>' +
+    '<span class="r-wafers-fixed">+' + (ROUTINE_REWARD * WAFER_VALUE) + ' XP</span>' +
     '<input type="text" class="r-note" value="' + escapeHtml(r.note || '') + '" placeholder="备注（可选）" title="备注">' +
     '<button class="btn-remove" onclick="removeRoutineField(this)">✕</button>' +
   '</div>';
@@ -202,6 +205,7 @@ function removeRoutineField(btn) {
   _bindRoutineDrag();
 }
 
+/** 保存当天日课副本 — 仅写入每日独立数据，不修改全局模板 */
 function saveRoutineForm() {
   var rows = document.querySelectorAll('#rList > .r-row');
   var out = [];
@@ -214,21 +218,34 @@ function saveRoutineForm() {
       icon:     rows[i].querySelector('.r-icon-btn').textContent.trim() || '🔁',
       name:     name,
       duration: duration,
-      wafers:   ROUTINE_REWARD * WAFER_VALUE,  // 固定 50 円
+      wafers:   ROUTINE_REWARD * WAFER_VALUE,
       note:     rows[i].querySelector('.r-note').value.trim(),
       category: 'life',
       priority: 'low',
       flowHint: '',
     });
   }
-  store.routines = out;
-  saveRoutines();
+  /* v10.0: Write to daily data copy, not global template */
+  var dd = getDailyData(store.currentDate) || initDailyData(store.currentDate);
+  dd.routines = out;
+  saveDailyData(store.currentDate, dd);
   renderTimeline();
   renderHeroProgress();
-  // 保存后刷新面板保持 data-id 同步 + 拖拽重新绑定
   _renderRoutinePanel();
   _bindRoutineDrag();
-  toast('已保存 ' + out.length + ' 项固定事务预设', 'ok');
+  toast('已保存 ' + out.length + ' 项当天日课副本', 'ok');
+}
+
+/** 将当天日课副本推送至全局模板 — 仅影响未来未初始化日期 */
+function pushRoutinesToTemplate() {
+  var dd = getDailyData(store.currentDate);
+  if (!dd || !dd.routines || !dd.routines.length) {
+    toast('当天没有日课数据可推送', 'warn');
+    return;
+  }
+  store.routines = JSON.parse(JSON.stringify(dd.routines));
+  saveRoutines();
+  toast('已推送 ' + store.routines.length + ' 项日课至模板（仅影响未来新日期）', 'ok');
 }
 
 function _bindRoutineDrag() {
@@ -337,7 +354,7 @@ function toggleFixedTask(id) {
       setBalance(Math.max(0, getBalance() - reward));
       recordTransaction('spend', reward, '撤销固定事务: ' + (ft ? ft.name : id), earnedKey);
       unmarkEarned(store.currentDate, earnedKey);
-      toast('已撤销，退回 ' + reward + ' 円', 'ok');
+      toast('已撤销，退回 ' + reward + ' XP', 'ok');
     }
   }
   renderTimeline();

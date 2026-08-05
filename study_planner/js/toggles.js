@@ -300,5 +300,5 @@ function resetToday() {
   }
 
   renderAll();
-  toast('🔄 今日已重置！退还 ' + refundTotal + ' 円（' + taskCount + '个任务+' + routineCount + '个日常）', 'ok');
+  toast('🔄 今日已重置！退还 ' + refundTotal + ' XP（' + taskCount + '个任务+' + routineCount + '个日常）', 'ok');
 }
