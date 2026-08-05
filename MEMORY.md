@@ -1,3 +1,4 @@
+- [Pilot 工作偏好](C:\Users\Ahsoka·Tano\.claude\projects\C--Users-Ahsoka-Tano-Desktop-DailyPlan\memory\pilot-preferences.md) — 讨论先于行动、无硬编码、DB 优先
 - [存档数据隔离模型](C:\Users\Ahsoka·Tano\.claude\projects\C--Users-Ahsoka-Tano-Desktop-DailyPlan\memory\archive-data-model.md) — 模板-副本分离 (Copy-on-Write) 架构
 - [AI 人设开放 Prompt](C:\Users\Ahsoka·Tano\.claude\projects\C--Users-Ahsoka-Tano-Desktop-DailyPlan\memory\ai-persona-open-prompt.md) — 无硬编码预设，用户自由输入
 - [AI 面板设计](C:\Users\Ahsoka·Tano\.claude\projects\C--Users-Ahsoka-Tano-Desktop-DailyPlan\memory\ai-panel-design.md) — 单一入口 + 智能上下文切换 + 数据锚点防遗忘
