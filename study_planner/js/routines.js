@@ -133,7 +133,7 @@ function _routineRowHTML(i, r) {
     '<button class="r-icon-btn" onclick="_openIconPicker(this,' + i + ')" title="选择图标">' + icon + '</button>' +
     '<input type="text" class="r-name" value="' + escapeHtml(r.name || '') + '" placeholder="名称，如 早餐" title="名称">' +
     '<input type="number" class="r-duration" value="' + (r.duration || '') + '" placeholder="分钟" title="用时（分钟）" style="width:70px">' +
-    '<span class="r-wafers-fixed">💎 50</span>' +
+    '<span class="r-wafers-fixed">+' + (ROUTINE_REWARD * WAFER_VALUE) + ' XP</span>' +
     '<input type="text" class="r-note" value="' + escapeHtml(r.note || '') + '" placeholder="备注（可选）" title="备注">' +
     '<button class="btn-remove" onclick="removeRoutineField(this)">✕</button>' +
   '</div>';
