@@ -329,12 +329,14 @@ function tlDeleteTask(e, id, kind) {
 
   var label = '';
   if (kind === 'fixed') {
-    var routines = store.routines || [];
+    /* v10.0: Remove from daily copy only, NOT from global template */
+    var dd = getDailyData(store.currentDate);
+    var routines = (dd && dd.routines) ? dd.routines : (store.routines || []);
     var idx = -1;
     for (var i = 0; i < routines.length; i++) { if (routines[i].id === id) { idx = i; label = routines[i].name; break; } }
     if (idx === -1) return;
-    store.routines.splice(idx, 1);
-    saveRoutines();
+    routines.splice(idx, 1);
+    if (dd) { dd.routines = routines; saveDailyData(store.currentDate, dd); }
     if (store.routineProgress[store.currentDate]) delete store.routineProgress[store.currentDate][id];
     saveRoutineProgress();
     var earnedKey = 'fixed_' + id;
