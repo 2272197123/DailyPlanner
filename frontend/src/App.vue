@@ -3,6 +3,7 @@ import { onMounted } from 'vue'
 import { useCurrencyStore } from '@/stores/currency'
 import { useThemeStore } from '@/stores/theme'
 import { useArchiveStore } from '@/stores/archive'
+import { useAiStore } from '@/stores/ai'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import DailyReview from '@/components/layout/DailyReview.vue'
 import AiDrawer from '@/components/ai/AiDrawer.vue'
@@ -11,6 +12,7 @@ import ToastContainer from '@/components/shared/ToastContainer.vue'
 const currencyStore = useCurrencyStore()
 const themeStore = useThemeStore()
 const archiveStore = useArchiveStore()
+const aiStore = useAiStore()
 
 onMounted(() => {
   currencyStore.initFromCache()
@@ -30,7 +32,7 @@ onMounted(() => {
 
     <AppHeader />
 
-    <main class="app-main" :class="{ 'ai-shifted': false }">
+    <main class="app-main" :class="{ 'ai-shifted': aiStore.drawerOpen }">
       <router-view />
     </main>
 

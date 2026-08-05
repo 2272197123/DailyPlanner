@@ -1,19 +1,42 @@
-# AI 交互补全 — 动态顺延+三系统统一+抽屉回退+对话摘要
+# AI 交互补全 — 动态顺延+三系统统一+抽屉回退+对话摘要+智能问候
 
 ## Goal
 
-TBD.
+将 AI 交互简化为单一抽屉面板。动态顺延未完成任务、统一三套旧 AI 系统、增加服务端回退、对话自动摘要。问候语根据日期、目标阶段、完成状态动态变化。
 
 ## Requirements
 
-- TBD
+### R1：统一 AI 抽屉面板
+- R1.1：右下角悬浮按钮 + Shift+Space 快捷键
+- R1.2：右侧滑入抽屉（推挤主内容），边缘可拖拽调整宽度
+- R1.3：聊天界面：消息列表（用户+AI）+ 底部输入框
+- R1.4：输入框多行可拖拽，Enter 发送，Shift+Enter 换行
+
+### R2：智能问候语
+- R2.1：首次打开面板时显示问候语，根据时段变化（早上/下午/晚上）
+- R2.2：根据当前状态提供情境化提示：有活跃目标→提及目标阶段；今日有计划→提及计划；今日已完成部分→提及进度
+- R2.3：快速提示按钮（suggestion chips）：点击自动填入输入框
+- R2.4：无 API Key 时引导配置
+
+### R3：目标讨论与每日任务生成
+- R3.1：每次请求自动注入结构化上下文（活跃目标、今日计划、完成状态）
+- R3.2：AI 返回任务预览时可编辑再导入
+- R3.3：约 10 轮对话后自动压缩摘要
+
+### R4：动态顺延
+- R4.1：检测昨日未完成任务 → 提示用户处理
+- R4.2：三种处理：顺延到明天 / 顺延并增加每日工作量 / 放弃
+- R4.3：有硬截止日期的目标→顺延时计算剩余天数重分配
+
+### R5：服务端回退
+- R5.1：前端直连 API 优先
+- R5.2：无 API Key 或直连失败时回退到服务端代理
 
 ## Acceptance Criteria
 
-- [ ] TBD
-
-## Notes
-
-- Keep `prd.md` focused on requirements, constraints, and acceptance criteria.
-- Lightweight tasks can remain PRD-only.
-- For complex tasks, add `design.md` for technical design and `implement.md` for execution planning before `task.py start`.
+- [ ] AC1：Shift+Space 打开 AI 抽屉 → 看到根据时段变化的问候语
+- [ ] AC2：有活跃目标时→问候语提及目标 + 快速提示按钮包含目标相关选项
+- [ ] AC3：无 API Key→显示配置引导
+- [ ] AC4：发送消息→AI 回复→可预览编辑任务→导入
+- [ ] AC5：昨日有未完成任务→面板顶部提示顺延选项
+- [ ] AC6：控制台零报错
