@@ -1,1 +1,0 @@
-import{S as e,T as t,j as n,n as r}from"./index-4EggscLo.js";var i={},a={class:`settings-view`};function o(r,i){return n(),t(`div`,a,[...i[0]||=[e(`h1`,null,`设置`,-1),e(`p`,null,`设置面板将在后续迁移中实现。`,-1)]])}var s=r(i,[[`render`,o]]);export{s as default};

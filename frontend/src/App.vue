@@ -2,17 +2,20 @@
 import { onMounted } from 'vue'
 import { useCurrencyStore } from '@/stores/currency'
 import { useThemeStore } from '@/stores/theme'
+import { useArchiveStore } from '@/stores/archive'
 import AppHeader from '@/components/layout/AppHeader.vue'
-import AppFeedback from '@/components/layout/AppFeedback.vue'
+import DailyReview from '@/components/layout/DailyReview.vue'
 import AiDrawer from '@/components/ai/AiDrawer.vue'
 import ToastContainer from '@/components/shared/ToastContainer.vue'
 
 const currencyStore = useCurrencyStore()
 const themeStore = useThemeStore()
+const archiveStore = useArchiveStore()
 
 onMounted(() => {
   currencyStore.initFromCache()
   themeStore.initFromCache()
+  archiveStore.initFromCache()
 })
 </script>
 
@@ -31,7 +34,7 @@ onMounted(() => {
       <router-view />
     </main>
 
-    <AppFeedback />
+    <DailyReview />
     <AiDrawer />
     <ToastContainer />
   </div>
