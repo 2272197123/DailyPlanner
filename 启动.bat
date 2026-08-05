@@ -1,16 +1,15 @@
 @echo off
-title DailyPlan - Start
-
+title DailyPlan v10.0
 cd /d "%~dp0study_planner"
 
-echo DailyPlan v9.0
-echo Starting server...
+echo.
+echo   DailyPlan v10.0 — Vue 3 + FastAPI
+echo   http://localhost:5000
+echo.
+echo   DO NOT CLOSE THIS WINDOW.
 echo.
 
-start /B python launcher.py
+start http://localhost:5000
+python launcher.py
 
-echo Server starting at http://localhost:5000
-echo.
-echo DO NOT CLOSE THIS WINDOW.
-echo.
 pause
