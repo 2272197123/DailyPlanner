@@ -1,0 +1,1 @@
+import{a as e,l as t,o as n,t as r}from"./index-DwEEw1lq.js";var i={},a={class:`settings-view`};function o(r,i){return t(),n(`div`,a,[...i[0]||=[e(`h1`,null,`设置`,-1),e(`p`,null,`设置面板将在后续迁移中实现。`,-1)]])}var s=r(i,[[`render`,o]]);export{s as default};
