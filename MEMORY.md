@@ -6,3 +6,4 @@
 - [v9.0 重构完成总结](C:\Users\Ahsoka·Tano\.claude\projects\C--Users-Ahsoka-Tano-Desktop-DailyPlan\memory\v9-refactor-complete.md) — 8个子任务完成 + Git初始化 + Code-Spec更新
 - [v9.0 最终状态](C:\Users\Ahsoka·Tano\.claude\projects\C--Users-Ahsoka-Tano-Desktop-DailyPlan\memory\v9-final-status.md) — 代码规模、数据库、Git 状态
 - [v9.0 已知问题](C:\Users\Ahsoka·Tano\.claude\projects\C--Users-Ahsoka-Tano-Desktop-DailyPlan\memory\v9-known-issues.md) — 待修复问题清单
+- [会话结束清单](C:\Users\Ahsoka·Tano\.claude\projects\C--Users-Ahsoka-Tano-Desktop-DailyPlan\memory\session-end-checklist.md) — 下次会话启动指令
