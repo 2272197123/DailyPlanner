@@ -3,7 +3,7 @@ import api from '@/api/client'
 
 export const useAccountingStore = defineStore('accounting', {
   state: () => ({
-    entries: [],          // [{ id, type, category, amount, date, note }]
+    entries: [],          // [{ id, type, category, amount, date, description }]
     categories: { income: [], expense: [] },
     period: 'month',      // week | month | quarter | year | custom
     customRange: { from: '', to: '' },
@@ -63,6 +63,17 @@ export const useAccountingStore = defineStore('accounting', {
       return Object.entries(map).map(([name, amount]) => ({ name, amount })).sort((a, b) => b.amount - a.amount)
     },
 
+    incomeByCategory() {
+      const map = {}
+      this.filteredEntries
+        .filter(e => e.type === 'income')
+        .forEach(e => {
+          const cat = e.category || '其他'
+          map[cat] = (map[cat] || 0) + (e.amount || 0)
+        })
+      return Object.entries(map).map(([name, amount]) => ({ name, amount })).sort((a, b) => b.amount - a.amount)
+    },
+
     trendByDay() {
       const map = {}
       this.filteredEntries.forEach(e => {
@@ -81,28 +92,56 @@ export const useAccountingStore = defineStore('accounting', {
     async fetchEntries() {
       this.loading = true
       try {
-        const { data } = await api.get('/accounting')
-        if (Array.isArray(data)) this.entries = data
-        this.loading = false
-      } catch {
+        const { data } = await api.get('/ledger')
+        if (data && Array.isArray(data)) this.entries = data
+      } catch (err) {
+        console.warn('Failed to fetch ledger:', err)
         try {
           const raw = localStorage.getItem('dp_acc_entries')
           if (raw) this.entries = JSON.parse(raw)
         } catch { /* ignore */ }
+      } finally {
         this.loading = false
       }
     },
 
     async addEntry(entry) {
-      const e = { id: 'acc_' + Date.now(), ...entry, createdAt: new Date().toISOString() }
-      this.entries.unshift(e)
-      await this._persist()
-      return e
+      try {
+        const { data } = await api.post('/ledger', entry)
+        const e = { ...entry, id: data?.id || 'acc_' + Date.now(), created_at: new Date().toISOString() }
+        this.entries.unshift(e)
+        this._cache()
+        return e
+      } catch (err) {
+        console.warn('Failed to add ledger entry:', err)
+        const e = { id: 'acc_' + Date.now(), ...entry, created_at: new Date().toISOString() }
+        this.entries.unshift(e)
+        this._cache()
+        return e
+      }
+    },
+
+    async updateEntry(id, entry) {
+      try {
+        await api.put(`/ledger/${id}`, entry)
+        const idx = this.entries.findIndex(e => String(e.id) === String(id))
+        if (idx !== -1) {
+          this.entries[idx] = { ...this.entries[idx], ...entry }
+        }
+        this._cache()
+      } catch (err) {
+        console.warn('Failed to update ledger entry:', err)
+      }
     },
 
     async deleteEntry(id) {
-      this.entries = this.entries.filter(e => e.id !== id)
-      await this._persist()
+      try {
+        await api.delete(`/ledger/${id}`)
+      } catch (err) {
+        console.warn('Failed to delete ledger entry:', err)
+      }
+      this.entries = this.entries.filter(e => String(e.id) !== String(id))
+      this._cache()
     },
 
     setPeriod(p) { this.period = p },
@@ -117,11 +156,10 @@ export const useAccountingStore = defineStore('accounting', {
       } catch { /* ignore */ }
     },
 
-    async _persist() {
+    _cache() {
       try {
         localStorage.setItem('dp_acc_entries', JSON.stringify(this.entries))
-        await api.put('/accounting', this.entries)
-      } catch { /* silent */ }
+      } catch { /* ignore */ }
     },
 
     initFromCache() {

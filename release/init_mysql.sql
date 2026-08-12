@@ -53,6 +53,33 @@ CREATE TABLE IF NOT EXISTS progress (
     PRIMARY KEY (user_id, date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 心情
+CREATE TABLE IF NOT EXISTS moods (
+    user_id     INT NOT NULL,
+    date        VARCHAR(10) NOT NULL,
+    color       VARCHAR(7) NOT NULL DEFAULT '#9ca3af',
+    label       VARCHAR(20) NOT NULL DEFAULT '一般',
+    note        TEXT,
+    intensity   INT DEFAULT 2,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, date),
+    INDEX idx_moods_user_date (user_id, date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 记账
+CREATE TABLE IF NOT EXISTS ledger (
+    id          INT PRIMARY KEY AUTO_INCREMENT,
+    user_id     INT NOT NULL,
+    date        VARCHAR(10) NOT NULL,
+    amount      DECIMAL(12,2) NOT NULL,
+    type        VARCHAR(10) NOT NULL DEFAULT 'expense',
+    category    VARCHAR(50) NOT NULL DEFAULT '其他',
+    description TEXT,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_ledger_user_date (user_id, date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 日课完成状态
 CREATE TABLE IF NOT EXISTS routine_done (
     user_id     INT NOT NULL,

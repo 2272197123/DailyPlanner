@@ -74,8 +74,26 @@ class ProgressUpdate(BaseModel):
     mode: str = "full"
 
 
+class MoodEntry(BaseModel):
+    date: str
+    color: str = "#9ca3af"
+    label: str = "一般"
+    note: str = ""
+    intensity: int = 2
+
+
 class BalanceUpdate(BaseModel):
     balance: int
+
+
+class LedgerEntry(BaseModel):
+    id: Optional[str] = None
+    date: str
+    amount: float
+    type: str = "expense"  # income / expense
+    category: str = "其他"
+    description: str = ""
+    created_at: Optional[str] = None
 
 
 class PrefsUpdate(BaseModel):

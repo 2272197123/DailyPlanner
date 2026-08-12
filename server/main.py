@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from server.models import (
-    DailyPlan, ProgressUpdate, RoutineProgressUpdate,
+    DailyPlan, ProgressUpdate, RoutineProgressUpdate, MoodEntry, LedgerEntry,
     BalanceUpdate, PrefsUpdate, APIResponse,
     UserCreate, UserLogin, AuthResponse, TokenRefresh,
     GeneratePlanRequest, GeneratePlanResponse,
@@ -20,6 +20,8 @@ from server.models import (
 from server.db import (
     init_db, get_plan, save_plan, delete_plan, list_plans,
     get_progress, save_progress,
+    get_mood, save_mood, delete_mood, list_moods,
+    get_ledger, list_ledger, create_ledger, update_ledger, delete_ledger,
     get_routine_done, set_routine_done,
     get_balance, set_balance,
     is_earned, mark_earned, get_all_earned,
@@ -278,6 +280,82 @@ async def api_save_progress(date: str, body: dict, user: dict = Depends(require_
     body["date"] = date
     save_progress(user["user_id"], body)
     return {"ok": True, "message": "已保存"}
+
+
+# ═══════════════════════════════════════
+# 心情 API
+# ═══════════════════════════════════════
+
+@app.get("/api/moods")
+async def api_list_moods(year: int | None = None, user: dict = Depends(require_user)):
+    moods = list_moods(user["user_id"], year)
+    return {"ok": True, "data": moods}
+
+
+@app.get("/api/mood/{date}")
+async def api_get_mood(date: str, user: dict = Depends(require_user)):
+    mood = get_mood(user["user_id"], date)
+    if not mood:
+        raise HTTPException(404, "无此心情记录")
+    return {"ok": True, "data": mood}
+
+
+@app.put("/api/mood/{date}")
+async def api_save_mood(date: str, body: MoodEntry, user: dict = Depends(require_user)):
+    data = body.model_dump()
+    data["date"] = date
+    save_mood(user["user_id"], data)
+    return {"ok": True, "message": "已保存"}
+
+
+@app.delete("/api/mood/{date}")
+async def api_delete_mood(date: str, user: dict = Depends(require_user)):
+    deleted = delete_mood(user["user_id"], date)
+    if not deleted:
+        raise HTTPException(404, "无此心情记录")
+    return {"ok": True, "message": "已删除"}
+
+
+# ═══════════════════════════════════════
+# 记账 API
+# ═══════════════════════════════════════
+
+@app.get("/api/ledger")
+async def api_list_ledger(start: str | None = None, end: str | None = None, user: dict = Depends(require_user)):
+    entries = list_ledger(user["user_id"], start, end)
+    return {"ok": True, "data": entries}
+
+
+@app.post("/api/ledger")
+async def api_create_ledger(body: LedgerEntry, user: dict = Depends(require_user)):
+    data = body.model_dump()
+    entry_id = create_ledger(user["user_id"], data)
+    return {"ok": True, "id": entry_id, "message": "已添加"}
+
+
+@app.get("/api/ledger/{entry_id}")
+async def api_get_ledger(entry_id: int, user: dict = Depends(require_user)):
+    entry = get_ledger(user["user_id"], entry_id)
+    if not entry:
+        raise HTTPException(404, "无此记录")
+    return {"ok": True, "data": entry}
+
+
+@app.put("/api/ledger/{entry_id}")
+async def api_update_ledger(entry_id: int, body: LedgerEntry, user: dict = Depends(require_user)):
+    data = body.model_dump()
+    updated = update_ledger(user["user_id"], entry_id, data)
+    if not updated:
+        raise HTTPException(404, "无此记录")
+    return {"ok": True, "message": "已更新"}
+
+
+@app.delete("/api/ledger/{entry_id}")
+async def api_delete_ledger(entry_id: int, user: dict = Depends(require_user)):
+    deleted = delete_ledger(user["user_id"], entry_id)
+    if not deleted:
+        raise HTTPException(404, "无此记录")
+    return {"ok": True, "message": "已删除"}
 
 
 # ═══════════════════════════════════════

@@ -1,10 +1,12 @@
 <script setup>
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
+import anime from 'animejs'
 import { useCurrencyStore } from '@/stores/currency'
 import { useThemeStore } from '@/stores/theme'
 import { useArchiveStore } from '@/stores/archive'
 import { useAiStore } from '@/stores/ai'
-import AppHeader from '@/components/layout/AppHeader.vue'
+import { useMoodStore } from '@/stores/mood'
+import AppSidebar from '@/components/layout/AppSidebar.vue'
 import DailyReview from '@/components/layout/DailyReview.vue'
 import AiDrawer from '@/components/ai/AiDrawer.vue'
 import ToastContainer from '@/components/shared/ToastContainer.vue'
@@ -13,27 +15,49 @@ const currencyStore = useCurrencyStore()
 const themeStore = useThemeStore()
 const archiveStore = useArchiveStore()
 const aiStore = useAiStore()
+const moodStore = useMoodStore()
+
+const orbsRef = ref([])
 
 onMounted(() => {
   currencyStore.initFromCache()
   themeStore.initFromCache()
   archiveStore.initFromCache()
+  moodStore.fetchMoods()
+
+  // Ambient orbs slow float + scale animation
+  anime({
+    targets: '.ambient-orb',
+    translateX: () => anime.random(-30, 30),
+    translateY: () => anime.random(-20, 20),
+    scale: [1, 1.08, 1],
+    opacity: [0.18, 0.28, 0.18],
+    easing: 'easeInOutSine',
+    duration: () => anime.random(8000, 14000),
+    delay: anime.stagger(2000),
+    loop: true,
+    direction: 'alternate'
+  })
 })
 </script>
 
 <template>
   <div class="app-shell">
     <!-- Ambient atmosphere (pure CSS, never remove) -->
-    <div class="ambient-orb orb-1"></div>
-    <div class="ambient-orb orb-2"></div>
-    <div class="ambient-orb orb-3"></div>
+    <div class="ambient-orb orb-1" ref="orbsRef"></div>
+    <div class="ambient-orb orb-2" ref="orbsRef"></div>
+    <div class="ambient-orb orb-3" ref="orbsRef"></div>
     <div class="paper-texture"></div>
     <div class="hanko-seal"></div>
 
-    <AppHeader />
+    <AppSidebar />
 
     <main class="app-main" :class="{ 'ai-shifted': aiStore.drawerOpen }">
-      <router-view />
+      <router-view v-slot="{ Component }">
+        <transition name="page" mode="out-in">
+          <component :is="Component" />
+        </transition>
+      </router-view>
     </main>
 
     <DailyReview />
@@ -49,5 +73,28 @@ onMounted(() => {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  padding-left: 260px;
+}
+
+.app-main {
+  flex: 1;
+  max-width: none;
+  margin: 0;
+  padding: var(--space-6) var(--space-8) var(--space-12);
+  width: 100%;
+  transition: margin-right var(--duration-normal) var(--ease-out);
+}
+
+.app-main.ai-shifted {
+  margin-right: 380px;
+}
+
+@media (max-width: 768px) {
+  .app-shell {
+    padding-left: 0;
+  }
+  .app-main {
+    padding: var(--space-4);
+  }
 }
 </style>

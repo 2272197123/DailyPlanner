@@ -9,7 +9,7 @@ const toastStore = useToastStore()
 const showAddForm = ref(false)
 const pieCanvas = ref(null)
 const barCanvas = ref(null)
-const newEntry = ref({ type: 'expense', category: '', amount: '', date: new Date().toISOString().slice(0, 10), note: '' })
+const newEntry = ref({ type: 'expense', category: '', amount: '', date: new Date().toISOString().slice(0, 10), description: '' })
 
 /* ── Computed ── */
 const summary = computed(() => accountingStore.summary)
@@ -129,9 +129,9 @@ async function handleAdd() {
     category: newEntry.value.category,
     amount: parseFloat(newEntry.value.amount),
     date: newEntry.value.date,
-    note: newEntry.value.note
+    description: newEntry.value.description
   })
-  newEntry.value = { type: 'expense', category: '', amount: '', date: new Date().toISOString().slice(0, 10), note: '' }
+  newEntry.value = { type: 'expense', category: '', amount: '', date: new Date().toISOString().slice(0, 10), description: '' }
   showAddForm.value = false
   toastStore.ok('已添加')
   await nextTick()
@@ -238,7 +238,7 @@ onMounted(async () => {
         </select>
         <input v-model="newEntry.amount" type="number" class="gc-input" placeholder="金额" step="0.01" />
         <input v-model="newEntry.date" type="date" class="gc-input sm" />
-        <input v-model="newEntry.note" class="gc-input" placeholder="备注（可选）" />
+        <input v-model="newEntry.description" class="gc-input" placeholder="备注（可选）" />
         <button class="btn-primary" @click="handleAdd">添加</button>
       </div>
     </transition>
@@ -248,7 +248,7 @@ onMounted(async () => {
       <h4>📋 近期记录</h4>
       <div v-for="e in accountingStore.filteredEntries.slice(0, 20)" :key="e.id" class="lpe-item">
         <span class="lpe-cat">{{ e.category || '其他' }}</span>
-        <span class="lpe-note" v-if="e.note">{{ e.note }}</span>
+        <span class="lpe-note" v-if="e.description">{{ e.description }}</span>
         <span class="lpe-date">{{ (e.date || '').slice(5) }}</span>
         <span class="lpe-amt" :class="e.type">{{ e.type === 'income' ? '+' : '-' }}¥{{ (e.amount || 0).toFixed(2) }}</span>
         <button class="lpe-del" @click="handleDelete(e.id)">✕</button>
@@ -259,9 +259,7 @@ onMounted(async () => {
 
 <style scoped>
 .ledger-panel {
-  max-width: 680px;
-  margin: 0 auto;
-  padding: var(--space-4) 0;
+  width: 100%;
 }
 
 .ledger-header {

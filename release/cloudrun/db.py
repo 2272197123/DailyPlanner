@@ -226,6 +226,39 @@ class SQLiteDB(DBInterface):
             )
         """)
         self.execute("""
+            CREATE TABLE IF NOT EXISTS moods (
+                user_id     INTEGER NOT NULL,
+                date        TEXT NOT NULL,
+                color       TEXT NOT NULL DEFAULT '#9ca3af',
+                label       TEXT NOT NULL DEFAULT '一般',
+                note        TEXT DEFAULT '',
+                intensity   INTEGER DEFAULT 2,
+                created_at  TEXT DEFAULT (datetime('now','localtime')),
+                updated_at  TEXT DEFAULT (datetime('now','localtime')),
+                PRIMARY KEY (user_id, date)
+            )
+        """)
+        self.execute("""
+            CREATE INDEX IF NOT EXISTS idx_moods_user_date
+            ON moods (user_id, date)
+        """)
+        self.execute("""
+            CREATE TABLE IF NOT EXISTS ledger (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id     INTEGER NOT NULL,
+                date        TEXT NOT NULL,
+                amount      REAL NOT NULL,
+                type        TEXT NOT NULL DEFAULT 'expense',
+                category    TEXT NOT NULL DEFAULT '其他',
+                description TEXT DEFAULT '',
+                created_at  TEXT DEFAULT (datetime('now','localtime'))
+            )
+        """)
+        self.execute("""
+            CREATE INDEX IF NOT EXISTS idx_ledger_user_date
+            ON ledger (user_id, date)
+        """)
+        self.execute("""
             CREATE TABLE IF NOT EXISTS ai_chat_history (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id         INTEGER NOT NULL,
@@ -428,6 +461,33 @@ class MySQLDB(DBInterface):
                 created_at            DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at            DATETIME DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (user_id, date)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """)
+        self.execute("""
+            CREATE TABLE IF NOT EXISTS moods (
+                user_id     INTEGER NOT NULL,
+                date        VARCHAR(10) NOT NULL,
+                color       VARCHAR(7) NOT NULL DEFAULT '#9ca3af',
+                label       VARCHAR(20) NOT NULL DEFAULT '一般',
+                note        TEXT,
+                intensity   INT DEFAULT 2,
+                created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, date),
+                INDEX idx_moods_user_date (user_id, date)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """)
+        self.execute("""
+            CREATE TABLE IF NOT EXISTS ledger (
+                id          INTEGER PRIMARY KEY AUTO_INCREMENT,
+                user_id     INTEGER NOT NULL,
+                date        VARCHAR(10) NOT NULL,
+                amount      DECIMAL(12,2) NOT NULL,
+                type        VARCHAR(10) NOT NULL DEFAULT 'expense',
+                category    VARCHAR(50) NOT NULL DEFAULT '其他',
+                description TEXT,
+                created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_ledger_user_date (user_id, date)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         """)
         self.execute("""
@@ -699,6 +759,39 @@ class PostgreSQLDB(DBInterface):
             )
         """)
         self.execute("""
+            CREATE TABLE IF NOT EXISTS moods (
+                user_id     INTEGER NOT NULL,
+                date        VARCHAR(10) NOT NULL,
+                color       VARCHAR(7) NOT NULL DEFAULT '#9ca3af',
+                label       VARCHAR(20) NOT NULL DEFAULT '一般',
+                note        TEXT DEFAULT '',
+                intensity   INT DEFAULT 2,
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, date)
+            )
+        """)
+        self.execute("""
+            CREATE INDEX IF NOT EXISTS idx_moods_user_date
+            ON moods (user_id, date)
+        """)
+        self.execute("""
+            CREATE TABLE IF NOT EXISTS ledger (
+                id          SERIAL PRIMARY KEY,
+                user_id     INTEGER NOT NULL,
+                date        VARCHAR(10) NOT NULL,
+                amount      NUMERIC(12,2) NOT NULL,
+                type        VARCHAR(10) NOT NULL DEFAULT 'expense',
+                category    VARCHAR(50) NOT NULL DEFAULT '其他',
+                description TEXT DEFAULT '',
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        self.execute("""
+            CREATE INDEX IF NOT EXISTS idx_ledger_user_date
+            ON ledger (user_id, date)
+        """)
+        self.execute("""
             CREATE TABLE IF NOT EXISTS ai_chat_history (
                 id              SERIAL PRIMARY KEY,
                 user_id         INTEGER NOT NULL,
@@ -948,6 +1041,147 @@ def save_progress(user_id: int, p: dict):
         (user_id, p["date"], p.get("note", ""), p.get("rating", 0), p.get("mode", "full")),
     )
     db.commit()
+
+
+# ── 心情 ──
+
+def get_mood(user_id: int, date: str) -> dict | None:
+    db = get_db()
+    row = db.fetchone(
+        "SELECT * FROM moods WHERE user_id = %s AND date = %s",
+        (user_id, date),
+    )
+    if not row:
+        return None
+    return {
+        "date": row["date"],
+        "color": row["color"],
+        "label": row["label"],
+        "note": row["note"] or "",
+        "intensity": row["intensity"] or 2,
+    }
+
+
+def save_mood(user_id: int, m: dict):
+    db = get_db()
+    db.execute(
+        "INSERT INTO moods (user_id, date, color, label, note, intensity, updated_at) "
+        "VALUES (%s,%s,%s,%s,%s,%s, NOW()) "
+        "ON DUPLICATE KEY UPDATE color=VALUES(color), label=VALUES(label), note=VALUES(note), "
+        "intensity=VALUES(intensity), updated_at=NOW()",
+        (user_id, m["date"], m.get("color", "#9ca3af"), m.get("label", "一般"),
+         m.get("note", ""), m.get("intensity", 2)),
+    )
+    db.commit()
+
+
+def delete_mood(user_id: int, date: str) -> bool:
+    db = get_db()
+    cur = db.execute(
+        "DELETE FROM moods WHERE user_id = %s AND date = %s",
+        (user_id, date),
+    )
+    db.commit()
+    return cur.rowcount > 0
+
+
+def list_moods(user_id: int, year: int | None = None) -> list[dict]:
+    db = get_db()
+    if year:
+        rows = db.fetchall(
+            "SELECT * FROM moods WHERE user_id = %s AND date LIKE %s ORDER BY date ASC",
+            (user_id, f"{year}%"),
+        )
+    else:
+        rows = db.fetchall(
+            "SELECT * FROM moods WHERE user_id = %s ORDER BY date ASC",
+            (user_id,),
+        )
+    return [{
+        "date": r["date"],
+        "color": r["color"],
+        "label": r["label"],
+        "note": r["note"] or "",
+        "intensity": r["intensity"] or 2,
+    } for r in rows]
+
+
+# ── 记账 ──
+
+def get_ledger(user_id: int, entry_id: int) -> dict | None:
+    db = get_db()
+    row = db.fetchone(
+        "SELECT * FROM ledger WHERE id = %s AND user_id = %s",
+        (entry_id, user_id),
+    )
+    if not row:
+        return None
+    return {
+        "id": row["id"],
+        "date": row["date"],
+        "amount": float(row["amount"]),
+        "type": row["type"],
+        "category": row["category"],
+        "description": row["description"] or "",
+        "created_at": row["created_at"],
+    }
+
+
+def list_ledger(user_id: int, start: str | None = None, end: str | None = None) -> list[dict]:
+    db = get_db()
+    sql = "SELECT * FROM ledger WHERE user_id = %s"
+    params = [user_id]
+    if start:
+        sql += " AND date >= %s"
+        params.append(start)
+    if end:
+        sql += " AND date <= %s"
+        params.append(end)
+    sql += " ORDER BY date DESC, id DESC"
+    rows = db.fetchall(sql, tuple(params))
+    return [{
+        "id": r["id"],
+        "date": r["date"],
+        "amount": float(r["amount"]),
+        "type": r["type"],
+        "category": r["category"],
+        "description": r["description"] or "",
+        "created_at": r["created_at"],
+    } for r in rows]
+
+
+def create_ledger(user_id: int, entry: dict) -> int:
+    db = get_db()
+    cur = db.execute(
+        "INSERT INTO ledger (user_id, date, amount, type, category, description) "
+        "VALUES (%s,%s,%s,%s,%s,%s)",
+        (user_id, entry["date"], float(entry["amount"]), entry.get("type", "expense"),
+         entry.get("category", "其他"), entry.get("description", "")),
+    )
+    db.commit()
+    return cur.lastrowid
+
+
+def update_ledger(user_id: int, entry_id: int, entry: dict) -> bool:
+    db = get_db()
+    cur = db.execute(
+        "UPDATE ledger SET date = %s, amount = %s, type = %s, category = %s, description = %s "
+        "WHERE id = %s AND user_id = %s",
+        (entry["date"], float(entry["amount"]), entry.get("type", "expense"),
+         entry.get("category", "其他"), entry.get("description", ""), entry_id, user_id),
+    )
+    db.commit()
+    return cur.rowcount > 0
+
+
+def delete_ledger(user_id: int, entry_id: int) -> bool:
+    db = get_db()
+    cur = db.execute(
+        "DELETE FROM ledger WHERE id = %s AND user_id = %s",
+        (entry_id, user_id),
+    )
+    db.commit()
+    return cur.rowcount > 0
 
 
 # ── 日常项 ──
