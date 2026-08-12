@@ -1,0 +1,11 @@
+{
+  "name": "dailyplan-static",
+  "private": true,
+  "version": "1.0.0",
+  "description": "DailyPlan static site — pre-built, no install needed",
+  "type": "module",
+  "scripts": {
+    "install": "exit 0",
+    "build": "rm -rf dist && mkdir -p dist/assets && cp -r assets/* dist/assets/ && cp *.html *.js *.json *.svg dist/ 2>/dev/null; exit 0"
+  }
+}

@@ -169,6 +169,12 @@ function _accSetCustomRange() {
 
 /* ── Open / Close (overlay-anim compatible) ── */
 function openAccounting() {
+  // 隐私保护：未登录用户不能使用记账功能
+  if (!store.user) {
+    toast('请先登录以使用记账功能', 'err');
+    if (typeof openAuthOverlay === 'function') openAuthOverlay('login');
+    return;
+  }
   if (!document.getElementById('modalOverlay').classList.contains('hidden')) closeModal();
   if (!document.getElementById('shopOverlay').classList.contains('hidden')) closeShop();
   if (!document.getElementById('focusOverlay').classList.contains('hidden')) closeFocus();

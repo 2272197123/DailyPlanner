@@ -15,6 +15,14 @@ var DEFAULT_API_CONFIG = {
 };
 
 function getApiConfig() {
+  // 优先从 store.prefs（服务器同步的）读取
+  if (store.prefs && (store.prefs.aiApiKey || store.prefs.aiBaseUrl || store.prefs.aiModel)) {
+    var serverCfg = JSON.parse(JSON.stringify(DEFAULT_API_CONFIG));
+    if (store.prefs.aiApiKey) serverCfg.apiKey = store.prefs.aiApiKey;
+    if (store.prefs.aiBaseUrl) serverCfg.baseURL = store.prefs.aiBaseUrl;
+    if (store.prefs.aiModel) serverCfg.model = store.prefs.aiModel;
+    return serverCfg;
+  }
   var cfg = LS.get('apiConfig', null);
   if (!cfg) return JSON.parse(JSON.stringify(DEFAULT_API_CONFIG));
   // merge missing keys
@@ -145,6 +153,19 @@ function _saveApiConfigFromForm() {
     model:    document.getElementById('apicfgModel').value.trim(),
   };
   saveApiConfig(cfg);
+  // 同步到服务器 prefs
+  if (typeof API !== 'undefined' && API.savePrefs) {
+    API.savePrefs({
+      aiApiKey: cfg.apiKey,
+      aiBaseUrl: cfg.baseURL,
+      aiModel: cfg.model,
+    }).catch(function() {});
+  }
+  // 同步到 store.prefs 以便 ai.js 的 _getEffectiveApiConfig() 读取
+  if (!store.prefs) store.prefs = {};
+  store.prefs.aiApiKey = cfg.apiKey;
+  store.prefs.aiBaseUrl = cfg.baseURL;
+  store.prefs.aiModel = cfg.model;
   closeApiConfig();
   toast('API 配置已保存', 'ok');
   // 如果导入面板开着，刷新 AI 按钮状态

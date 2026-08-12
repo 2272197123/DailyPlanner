@@ -1207,6 +1207,17 @@ html.theme-vapor[data-theme="dark"] {
   .routine-grid{grid-template-columns:repeat(2,1fr)}
 }
 
+/* ── Desktop large-screen expansion ── */
+@media(min-width:1600px){
+  .container{max-width:1200px;padding:32px 48px 72px}
+  .card-grid{grid-template-columns:repeat(4,1fr)}
+  .routine-grid{grid-template-columns:repeat(5,1fr)}
+  .bottom-panels{grid-template-columns:repeat(3,1fr)}
+}
+@media(min-width:2000px){
+  .container{max-width:1400px}
+}
+
 /* Scrollbar — subtle ink wash */
 html{scrollbar-width:thin;scrollbar-color:var(--border) transparent}
 ::-webkit-scrollbar{width:6px;height:6px}

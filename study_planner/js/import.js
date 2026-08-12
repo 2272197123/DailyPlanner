@@ -27,7 +27,7 @@ function _closeAllImportModals(exceptId) {
 
 function _renderImportPanel() {
   var panel = document.getElementById('importPanel');
-  var cfg = getApiConfig();
+  var cfg = _getEffectiveApiConfig();
   var hasKey = !!(cfg.apiKey && cfg.apiKey.trim());
 
   var html = '<div class="arch-head">' +
@@ -181,7 +181,7 @@ function _imSend() {
   document.getElementById('imDuration').value = '';
   _imAddMsg('user', { role: 'user', text: text, subject: subject, duration: dur });
 
-  var cfg = getApiConfig();
+  var cfg = _getEffectiveApiConfig();
   var d = new Date(store.currentDate + 'T00:00:00');
   d.setDate(d.getDate() + 1);
   var nextDate = d.toISOString().split('T')[0];
@@ -522,7 +522,7 @@ function generateFromAI() {
   d.setDate(d.getDate() + 1);
   var nextDate = d.toISOString().split('T')[0];
 
-  var apiCfg = getApiConfig();
+  var apiCfg = _getEffectiveApiConfig();
   var hasKey = !!(apiCfg.apiKey && apiCfg.apiKey.trim());
 
   var btn = document.getElementById('btnAiGenerate');
@@ -693,7 +693,7 @@ function _handleAiResult(result, forDate, statusEl, btn, origHTML) {
 function _updateAiButtonState() {
   var btn = document.getElementById('btnAiGenerate');
   if (!btn) return;
-  var cfg = getApiConfig();
+  var cfg = _getEffectiveApiConfig();
   if (cfg.apiKey && cfg.apiKey.trim()) {
     btn.title = '前端直连 ' + cfg.provider + '（' + cfg.model + '）';
   } else {

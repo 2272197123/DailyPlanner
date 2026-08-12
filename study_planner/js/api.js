@@ -6,7 +6,11 @@
    ═══════════════════════════════════════ */
 'use strict';
 
-const API_BASE = '';  // same-origin, no prefix needed
+const API_BASE = (function() {
+  // 生产环境：从 config.js 读取 apiBaseUrl, 去除尾部 /api 后缀
+  var base = (window.__APP_CONFIG__ && window.__APP_CONFIG__.apiBaseUrl) ? window.__APP_CONFIG__.apiBaseUrl : '';
+  return base.replace(/\/api\/?$/, '');
+})();
 
 const API = {
   async _fetch(url, opts = {}) {
@@ -79,8 +83,10 @@ const API = {
   saveChatHistory(date, body) { return this._fetch(`/api/chat-history/${date}`, { method: 'PUT', body: JSON.stringify(body) }); },
 
   // Auth（v8.0：JWT 用户认证）
-  register(username, password, email) {
-    return this._fetch(`/api/auth/register`, { method: 'POST', body: JSON.stringify({ username, password, email }) });
+  register(username, password, email, inviteCode) {
+    var body = { username: username, password: password, email: email };
+    if (inviteCode) body.inviteCode = inviteCode;
+    return this._fetch(`/api/auth/register`, { method: 'POST', body: JSON.stringify(body) });
   },
   login(username, password) {
     return this._fetch(`/api/auth/login`, { method: 'POST', body: JSON.stringify({ username, password }) });
@@ -89,6 +95,10 @@ const API = {
     return this._fetch(`/api/auth/refresh`, { method: 'POST', body: JSON.stringify({ refresh_token: refreshToken }) });
   },
   getMe() { return this._fetch(`/api/auth/me`); },
+
+  // Admin（v11.0：邀请码管理）
+  createInviteCode() { return this._fetch(`/api/admin/invite-codes`, { method: 'POST' }); },
+  listInviteCodes() { return this._fetch(`/api/admin/invite-codes`); },
 };
 
 /* ── Token 管理（v8.0） ── */

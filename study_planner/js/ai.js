@@ -57,6 +57,9 @@ function initAiDrawer() {
   document.body.appendChild(el);
   document.body.appendChild(btn);
 
+  // 根据登录状态控制可见性
+  updateAiButtonVisibility();
+
   // 拖拽调整宽度
   _aiBindResize();
 
@@ -248,10 +251,10 @@ function aiSend() {
   aiRender();
   aiSaveHistory();
 
-  var cfg = (typeof getApiConfig === 'function') ? getApiConfig() : {};
+  var cfg = _getEffectiveApiConfig();
   if (!cfg || !cfg.apiKey) {
     var hasKey = false;
-    try { var c2 = getApiConfig(); hasKey = !!(c2 && c2.apiKey && c2.apiKey.trim()); } catch(e) {}
+    try { var c2 = _getEffectiveApiConfig(); hasKey = !!(c2 && c2.apiKey && c2.apiKey.trim()); } catch(e) {}
     if (!hasKey) {
       _aiMsgs.push({ role: 'assistant', text: '请先配置 AI API Key。点击顶栏 🧰 → 🔑 AI API 设置。' });
       _aiLoading = false;
@@ -380,8 +383,27 @@ function _aiBuildContext(userText, forDate) {
 }
 
 /* ── AI 调用 ── */
+function _getEffectiveApiConfig() {
+  // 优先从服务器 prefs 读取，fallback 到 localStorage
+  var cfg = { apiKey: '', baseURL: 'https://api.deepseek.com', model: 'deepseek-chat' };
+  // 先读 localStorage
+  var localCfg = (typeof getApiConfig === 'function') ? getApiConfig() : {};
+  if (localCfg && localCfg.apiKey && localCfg.apiKey.trim()) {
+    cfg.apiKey = localCfg.apiKey.trim();
+    cfg.baseURL = localCfg.baseURL || cfg.baseURL;
+    cfg.model = localCfg.model || cfg.model;
+  }
+  // 再读服务器 prefs（优先级更高）
+  if (store.prefs && store.prefs.aiApiKey && store.prefs.aiApiKey.trim()) {
+    cfg.apiKey = store.prefs.aiApiKey.trim();
+    if (store.prefs.aiBaseUrl) cfg.baseURL = store.prefs.aiBaseUrl.trim();
+    if (store.prefs.aiModel) cfg.model = store.prefs.aiModel.trim();
+  }
+  return cfg;
+}
+
 function _callAi(messages, callback) {
-  var cfg = getApiConfig();
+  var cfg = _getEffectiveApiConfig();
   var url = (cfg.baseURL || 'https://api.deepseek.com').replace(/\/+$/, '');
   if (url.indexOf('/v1') === -1) url += '/v1';
   url += '/chat/completions';

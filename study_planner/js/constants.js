@@ -15,7 +15,7 @@ var CAT_EMOJI = {study:'📚', work:'💼', life:'🏠', health:'💪', review:'
 var CAT_LABELS = {study:'学习', work:'工作', life:'生活', health:'健康', review:'复盘', other:'其他'};
 const PRI_LABELS = {high:'🔴 高', medium:'🟡 中', low:'🟢 低'};
 
-const MODE_ORDER = ['full', 'minimum', 'recovery'];
+const MODE_ORDER = ['full', 'minimum'];
 
 const MODE_HIERARCHY = {
   full:     3,
@@ -120,8 +120,8 @@ var DEFAULT_TEMPLATE = {
 };
 
 var ACCOUNTING_CATEGORIES = {
-  income:  [],
-  expense: [],
+  income:  ['工资', '兼职', '投资收益', '红包', '退款', '其他收入'],
+  expense: ['餐饮', '交通', '购物', '住房', '娱乐', '医疗', '教育', '通讯', '日用', '其他支出'],
 };
 
 const ARCHIVE_PREFIX = 'dp_archive_';

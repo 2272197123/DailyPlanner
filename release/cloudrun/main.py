@@ -7,8 +7,6 @@ v11.0: 多用户数据隔离 + 白名单注册
 import json, os
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Depends
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from server.models import (
@@ -92,46 +90,33 @@ def _run_auto_migration(db):
 
 
 # ═══════════════════════════════════════
-# 前端静态文件（本地开发模式：Vue 3 SPA → 回退旧版）
+# 前端静态文件（云托管模式下仅返回 JSON）
 # ═══════════════════════════════════════
 
 @app.get("/")
 async def root():
-    spa_index = STATIC_DIR.parent / "server" / "static" / "index.html"
-    if spa_index.exists():
-        return FileResponse(str(spa_index))
-    return FileResponse(str(STATIC_DIR / "index_modular.html"))
+    return {"ok": True, "app": "DailyPlan API", "version": "11.0"}
+
+
+@app.get("/health")
+async def health():
+    return {"ok": True, "status": "healthy"}
 
 
 @app.get("/index.html")
 async def spa_fallback():
-    spa_index = STATIC_DIR.parent / "server" / "static" / "index.html"
-    if spa_index.exists():
-        return FileResponse(str(spa_index))
-    return FileResponse(str(STATIC_DIR / "index_modular.html"))
+    return {"ok": True, "message": "Frontend served by static hosting"}
 
 
 @app.get("/index_modular.html")
 async def index_page():
-    return FileResponse(str(STATIC_DIR / "index_modular.html"))
+    return {"ok": True, "message": "Legacy not available"}
 
 
-@app.get("/config.js")
-async def config_js():
-    config_path = STATIC_DIR / "config.js"
-    if config_path.exists():
-        return FileResponse(str(config_path))
-    return JSONResponse({"ok": False}, status_code=404)
-
-
-# 开发模式：静态资源禁用缓存
+# 静态资源中间件：云托管模式下无 /js /css /assets 目录，简化处理
 @app.middleware("http")
 async def no_cache_static(request, call_next):
     resp = await call_next(request)
-    p = request.url.path
-    if p.startswith(("/js", "/css", "/assets")) or p in ("/", "/index.html", "/index_modular.html", "/config.js"):
-        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-        resp.headers["Pragma"] = "no-cache"
     return resp
 
 
@@ -542,16 +527,3 @@ async def api_save_chat_history(date: str, body: dict, user: dict = Depends(requ
     save_chat_history(user["user_id"], date, messages, summary)
     return {"ok": True, "message": "已保存"}
 
-
-# ═══════════════════════════════════════
-# 静态文件挂载（本地开发 + 生产兼容）
-# ═══════════════════════════════════════
-_vue_assets = STATIC_DIR.parent / "server" / "static" / "assets"
-if _vue_assets.exists():
-    app.mount("/assets", StaticFiles(directory=str(_vue_assets)), name="assets")
-_study_js = STATIC_DIR / "js"
-if _study_js.exists():
-    app.mount("/js", StaticFiles(directory=str(_study_js)), name="js")
-_study_css = STATIC_DIR / "css"
-if _study_css.exists():
-    app.mount("/css", StaticFiles(directory=str(_study_css)), name="css")

@@ -26,6 +26,8 @@ function initStoreFromLS() {
   store.today   = toLocalDate(new Date());
   store.currentDate = store.today;
   store.mode    = LS.get('mode', 'full');
+  // v11.1：recovery 模式已移除，自动回退到 minimum
+  if (store.mode === 'recovery') store.mode = 'minimum';
   store.rating  = 0;
   store.theme   = 'system';
   store.focusTaskId = null;
@@ -58,6 +60,8 @@ function initStoreFromLS() {
 
   var dp = store.progress[store.currentDate];
   if (dp) { store.rating = dp.rating || 0; store.mode = dp.mode || store.mode; }
+  // v11.1：recovery 模式已移除，自动回退到 minimum
+  if (store.mode === 'recovery') store.mode = 'minimum';
 }
 
 /**
@@ -98,6 +102,9 @@ async function fetchPrefsFromServer() {
         waferSkin:   res.data.waferSkin || 'wafer',
         ownedSkins:  res.data.ownedSkins || ['wafer'],
         activeTheme: res.data.activeTheme || null,
+        aiApiKey:    res.data.aiApiKey || '',
+        aiBaseUrl:   res.data.aiBaseUrl || '',
+        aiModel:     res.data.aiModel || '',
       };
       store.theme      = res.data.theme || 'system';
       store.activeGoal = res.data.activeGoal || '';

@@ -67,6 +67,9 @@ async function goToday() {
 function setMode(m) {
   if (guardEdit()) return;
 
+  // v11.1：recovery 模式已移除，回退到 minimum
+  if (m === 'recovery') m = 'minimum';
+
   var cfg = getModeCfg();
 
   // Check if mode is locked for today

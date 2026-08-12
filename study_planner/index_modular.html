@@ -57,7 +57,8 @@
   </div>
   <div class="topbar-right">
     <span id="authBadge"></span>
-    <button class="theme-btn" id="themeToggle" onclick="toggleTheme()">🌓</button>
+    <button class="theme-btn" id="themeToggle" onclick="toggleTheme()" title="亮/暗切换">🌓</button>
+    <button class="theme-btn" onclick="openShop()" title="切换主题风格">🎨</button>
     <div class="balance-display" onclick="openLedger()" title="点击查看 XP 明细">
       <span class="balance-coin" id="balanceIcon">⭐</span><span id="balanceText">0 XP</span>
     </div>
@@ -68,7 +69,7 @@
     <div style="position:relative">
       <button class="shop-btn topbar-more-btn" onclick="toggleMoreMenu(event)" title="更多功能">🧰</button>
       <div class="more-menu" id="moreMenu">
-        <button class="more-item" onclick="openShop();toggleMoreMenu()">🏪 商城</button>
+        <button class="more-item" onclick="openShop();toggleMoreMenu()">🎨 主题</button>
         <button class="more-item" onclick="openAccounting();toggleMoreMenu()">📒 记账</button>
         <button class="more-item" onclick="openArchive();toggleMoreMenu()">📦 存档</button>
         <button class="more-item" onclick="openGoals();toggleMoreMenu()">🎯 目标</button>
@@ -210,6 +211,8 @@
 <!-- ═══════════════════════════════════════
    MODULE LOAD ORDER (dependency-aware)
    ═══════════════════════════════════════ -->
+<!-- Layer -1: runtime config (must load BEFORE api.js) -->
+<script src="config.js"></script>
 <!-- Layer 0: constants (zero deps) -->
 <script src="js/constants.js"></script>
 <!-- Layer 1: pure utilities -->
