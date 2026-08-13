@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import api from '@/api/client'
 import { useScheduleStore } from '@/stores/schedule'
+import { toLocalDate } from '@/utils/format'
 
 /** Lightweight goal reader — avoids circular dependency with full goal store */
 function _readGoals() {
@@ -168,7 +169,7 @@ export const useAiStore = defineStore('ai', {
       // Yesterday's carry-over
       const yesterday = new Date(today + 'T00:00:00')
       yesterday.setDate(yesterday.getDate() - 1)
-      const yDate = yesterday.toISOString().slice(0, 10)
+      const yDate = toLocalDate(yesterday)
       const ySched = scheduleStore.schedules[yDate]
       const yBlocks = (ySched && ySched.blocks) ? ySched.blocks : []
       const unfinished = yBlocks.filter(b => !b.completed)
@@ -182,18 +183,36 @@ export const useAiStore = defineStore('ai', {
       return parts.join('\n')
     },
 
+    /** 服务端 /generate-plan 回包处理：{ok, plan:{blocks}, usage, message} */
+    _handlePlanResponse(data) {
+      if (!data) return null
+      if (data.ok && data.plan && Array.isArray(data.plan.blocks) && data.plan.blocks.length) {
+        this.previewBlocks = data.plan.blocks.map((b, i) => ({
+          duration: 30,
+          subtasks: [],
+          ...b,
+          id: b.id || 'ai_' + Date.now() + '_' + i
+        }))
+        return (data.message || '已生成计划') + '\n（可在下方预览并导入任务）'
+      }
+      if (data.message) return data.message
+      if (data.plan) return '已生成计划：\n' + JSON.stringify(data.plan, null, 2)
+      return null
+    },
+
     async _callAi(text, context) {
       const cfg = this._getApiConfig()
       if (!cfg || !cfg.apiKey) {
         // Try server fallback
         try {
+          const scheduleStore = useScheduleStore()
           const { data } = await api.post('/generate-plan', {
-            date: (useScheduleStore()).currentDate,
-            prompt: text,
-            mode: (useScheduleStore()).mode
+            date: scheduleStore.currentDate,
+            dayMode: scheduleStore.mode,
+            feedback: text
           })
-          if (data && data.message) return data.message
-          if (data && data.plan) return '已生成计划：\n' + JSON.stringify(data.plan, null, 2)
+          const reply = this._handlePlanResponse(data)
+          if (reply) return reply
         } catch { /* fall through to error */ }
         return null
       }
@@ -230,12 +249,14 @@ export const useAiStore = defineStore('ai', {
       if (!resp.ok) {
         // Fallback to server
         try {
+          const scheduleStore = useScheduleStore()
           const { data } = await api.post('/generate-plan', {
-            date: (useScheduleStore()).currentDate,
-            prompt: text,
-            mode: (useScheduleStore()).mode
+            date: scheduleStore.currentDate,
+            dayMode: scheduleStore.mode,
+            feedback: text
           })
-          if (data && data.plan) return '已生成计划（通过服务端）：\n' + JSON.stringify(data.plan, null, 2)
+          const reply = this._handlePlanResponse(data)
+          if (reply) return reply
         } catch { /* fall through */ }
         return null
       }
@@ -322,7 +343,7 @@ export const useAiStore = defineStore('ai', {
       const scheduleStore = useScheduleStore()
       const yesterday = new Date(scheduleStore.currentDate + 'T00:00:00')
       yesterday.setDate(yesterday.getDate() - 1)
-      const yDate = yesterday.toISOString().slice(0, 10)
+      const yDate = toLocalDate(yesterday)
       const ySched = scheduleStore.schedules[yDate]
       if (!ySched || !ySched.blocks) return []
       return ySched.blocks.filter(b => !b.completed).map(b => ({

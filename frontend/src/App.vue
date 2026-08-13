@@ -1,11 +1,16 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import anime from 'animejs'
 import { useCurrencyStore } from '@/stores/currency'
 import { useThemeStore } from '@/stores/theme'
 import { useArchiveStore } from '@/stores/archive'
 import { useAiStore } from '@/stores/ai'
 import { useMoodStore } from '@/stores/mood'
+import { useScheduleStore } from '@/stores/schedule'
+import { useGoalStore } from '@/stores/goals'
+import { useAccountingStore } from '@/stores/accounting'
+import { useRoutineStore } from '@/stores/routines'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import DailyReview from '@/components/layout/DailyReview.vue'
 import AiDrawer from '@/components/ai/AiDrawer.vue'
@@ -16,6 +21,15 @@ const themeStore = useThemeStore()
 const archiveStore = useArchiveStore()
 const aiStore = useAiStore()
 const moodStore = useMoodStore()
+const scheduleStore = useScheduleStore()
+const goalStore = useGoalStore()
+const accountingStore = useAccountingStore()
+const routineStore = useRoutineStore()
+
+const route = useRoute()
+
+/* Public pages (e.g. /login) render outside the app shell */
+const isPublicPage = computed(() => !!route.meta.public)
 
 const orbsRef = ref([])
 
@@ -23,7 +37,13 @@ onMounted(() => {
   currencyStore.initFromCache()
   themeStore.initFromCache()
   archiveStore.initFromCache()
-  moodStore.fetchMoods()
+  scheduleStore.initFromCache()
+  goalStore.initFromCache()
+  accountingStore.initFromCache()
+  routineStore.initFromCache()
+  if (!isPublicPage.value) {
+    moodStore.fetchMoods()
+  }
 
   // Ambient orbs slow float + scale animation
   anime({
@@ -42,7 +62,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="app-shell">
+  <div class="app-shell" :class="{ 'no-sidebar': isPublicPage }">
     <!-- Ambient atmosphere (pure CSS, never remove) -->
     <div class="ambient-orb orb-1" ref="orbsRef"></div>
     <div class="ambient-orb orb-2" ref="orbsRef"></div>
@@ -50,9 +70,9 @@ onMounted(() => {
     <div class="paper-texture"></div>
     <div class="hanko-seal"></div>
 
-    <AppSidebar />
+    <AppSidebar v-if="!isPublicPage" />
 
-    <main class="app-main" :class="{ 'ai-shifted': aiStore.drawerOpen }">
+    <main class="app-main" :class="{ 'ai-shifted': aiStore.drawerOpen && !isPublicPage }">
       <router-view v-slot="{ Component }">
         <transition name="page" mode="out-in">
           <component :is="Component" />
@@ -60,8 +80,10 @@ onMounted(() => {
       </router-view>
     </main>
 
-    <DailyReview />
-    <AiDrawer />
+    <template v-if="!isPublicPage">
+      <DailyReview />
+      <AiDrawer />
+    </template>
     <ToastContainer />
   </div>
 </template>
@@ -74,6 +96,10 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   padding-left: 260px;
+}
+
+.app-shell.no-sidebar {
+  padding-left: 0;
 }
 
 .app-main {

@@ -2,6 +2,8 @@
    anime-presets.js — Reusable anime.js parameter sets
    ═══════════════════════════════════════ */
 
+import anime from 'animejs'
+
 export const presets = {
   fadeUp: {
     opacity: [0, 1],

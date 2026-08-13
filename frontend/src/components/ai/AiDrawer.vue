@@ -197,7 +197,7 @@ function startResize(e) {
             <!-- No API key guide -->
             <div v-if="!aiStore.hasApiKey" class="ai-no-key">
               <p>⚠️ 未配置 AI API Key</p>
-              <p class="ai-no-key-hint">前往设置页面或顶部 🧰 菜单 → 🔑 AI API 配置</p>
+              <p class="ai-no-key-hint">前往 <router-link :to="{ name: 'settings' }" class="ai-no-key-link">设置 → AI API 配置</router-link></p>
             </div>
           </div>
 
@@ -506,6 +506,8 @@ function startResize(e) {
 
 .ai-no-key p { font-size: var(--text-xs); color: var(--warning); }
 .ai-no-key-hint { font-size: var(--text-xs); color: var(--text-muted); margin-top: var(--space-1); }
+
+.ai-no-key-link { color: var(--accent); text-decoration: underline; }
 
 /* ── Message bubbles ── */
 .ai-msg {

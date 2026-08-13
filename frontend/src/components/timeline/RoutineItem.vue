@@ -3,6 +3,7 @@ import { useCurrencyStore } from '@/stores/currency'
 import { useRoutineStore } from '@/stores/routines'
 import { useScheduleStore } from '@/stores/schedule'
 import { useToastStore } from '@/stores/toast'
+import { useAnime } from '@/composables/useAnime'
 
 const props = defineProps({
   routine: Object,
@@ -10,31 +11,41 @@ const props = defineProps({
   done: Boolean
 })
 
+const emit = defineEmits(['toggle'])
+
 const currencyStore = useCurrencyStore()
 const routineStore = useRoutineStore()
 const scheduleStore = useScheduleStore()
 const toastStore = useToastStore()
+const { burst } = useAnime()
 
 const xpValue = 50 // ROUTINE_REWARD * WAFER_VALUE
 
-function handleToggle() {
+function handleToggle(event) {
   const rp = scheduleStore.routineProgress[props.date] || {}
   const wasDone = !!rp[props.routine.id]
   const newState = !wasDone
 
-  if (!scheduleStore.routineProgress[props.date]) {
-    scheduleStore.routineProgress[props.date] = {}
-  }
-  scheduleStore.routineProgress[props.date][props.routine.id] = newState
+  // 持久化：PUT /routine-done/{date}/{routine_id} + 本地缓存
+  scheduleStore.setRoutineDone(props.date, props.routine.id, newState)
 
   if (newState) {
-    currencyStore.addXP(xpValue, '完成固定事务: ' + props.routine.name)
-    toastStore.ok('+' + xpValue + ' XP')
+    // 防刷分：同一 routine 每天只发一次 XP（服务端幂等）
+    if (scheduleStore.awardOnce(props.date, 'fixed_' + props.routine.id)) {
+      currencyStore.addXP(xpValue, '完成固定事务: ' + props.routine.name)
+      toastStore.ok('+' + xpValue + ' XP')
+    } else {
+      toastStore.ok('已完成')
+    }
+    if (event) {
+      burst(event.clientX, event.clientY, { count: 10 })
+    }
   } else {
-    currencyStore.setBalance(Math.max(0, currencyStore.balance - xpValue))
-    currencyStore.recordTransaction('spend', xpValue, '撤销固定事务: ' + props.routine.name, 'fixed_' + props.routine.id)
+    // 撤销完成：仅改状态，不发也不扣 XP
     toastStore.warn('已撤销')
   }
+
+  emit('toggle')
 }
 </script>
 
@@ -45,6 +56,7 @@ function handleToggle() {
       <span class="ri-name">{{ routine.name }}</span>
       <span class="ri-note" v-if="routine.note">{{ routine.note }}</span>
     </div>
+    <span class="ri-time" v-if="routine.time">{{ routine.time }}</span>
     <span class="ri-xp">+{{ xpValue }} XP</span>
     <span class="ri-check">✓</span>
   </div>
@@ -108,6 +120,13 @@ function handleToggle() {
   background: var(--accent-muted);
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-full);
+}
+
+.ri-time {
+  font-family: var(--font-data);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 .ri-check {

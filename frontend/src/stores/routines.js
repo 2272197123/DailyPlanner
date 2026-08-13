@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import api from '@/api/client'
+import api, { unwrap } from '@/api/client'
 import { useScheduleStore } from '@/stores/schedule'
 
 export const useRoutineStore = defineStore('routines', {
@@ -10,11 +10,12 @@ export const useRoutineStore = defineStore('routines', {
   }),
 
   getters: {
-    /** Routines for the currently viewed date — daily copy first, template fallback */
+    /** Routines for the currently viewed date — daily copy first, template fallback.
+     *  注意用 key 存在性判断：某日删空所有 routine 时不应回落到模板 */
     routinesForCurrentDate(state) {
       const scheduleStore = useScheduleStore()
       const date = scheduleStore.currentDate
-      if (state.dailyCopies[date] && state.dailyCopies[date].length > 0) {
+      if (date in state.dailyCopies) {
         return state.dailyCopies[date]
       }
       return state.routines || []
@@ -30,8 +31,9 @@ export const useRoutineStore = defineStore('routines', {
       this.loading = true
       try {
         const { data } = await api.get('/routines')
-        if (data && data.length > 0) {
-          this.routines = data
+        const list = unwrap(data)
+        if (Array.isArray(list) && list.length > 0) {
+          this.routines = list
         }
         this.loading = false
         return this.routines
@@ -43,11 +45,24 @@ export const useRoutineStore = defineStore('routines', {
 
     async persistTemplate() {
       try {
-        await api.put('/routines', this.routines)
+        // 后端读取 body.get("routines")
+        await api.put('/routines', { routines: this.routines })
         localStorage.setItem('dp_routines', JSON.stringify(this.routines))
       } catch {
         localStorage.setItem('dp_routines', JSON.stringify(this.routines))
       }
+    },
+
+    /** Add a routine to the global template */
+    addRoutine(routine) {
+      this.routines.push(routine)
+      this.persistTemplate()
+    },
+
+    /** Remove a routine from the global template */
+    removeRoutine(routineId) {
+      this.routines = this.routines.filter(r => r.id !== routineId)
+      this.persistTemplate()
     },
 
     /** Save routines for a specific date — writes to daily copy, NOT global template */
@@ -84,7 +99,7 @@ export const useRoutineStore = defineStore('routines', {
       return true
     },
 
-    _persistDaily(date) {
+    async _persistDaily(date) {
       try {
         const key = 'dp_day_data_' + date
         let existing = {}
@@ -95,6 +110,12 @@ export const useRoutineStore = defineStore('routines', {
         existing.routines = this.dailyCopies[date] || []
         localStorage.setItem(key, JSON.stringify(existing))
       } catch { /* silent degrade */ }
+      // 服务端 day-data 是覆盖式整写：先 GET 合并其他字段再 PUT，避免清空 blocks/archive 等
+      try {
+        const { data } = await api.get(`/day-data/${date}`)
+        const existing = unwrap(data) || {}
+        await api.put(`/day-data/${date}`, { ...existing, routines: this.dailyCopies[date] || [] })
+      } catch { /* silent */ }
     },
 
     initFromCache() {

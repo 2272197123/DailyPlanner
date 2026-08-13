@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import api from '@/api/client'
+import api, { unwrap } from '@/api/client'
 
 const DEFAULT_SOURCES = [
   { id: 'hackernews', name: 'Hacker News', active: true, type: 'api', url: 'https://news.ycombinator.com' },
@@ -67,7 +67,8 @@ export const useNewsStore = defineStore('news', () => {
   async function loadSources() {
     try {
       const { data } = await api.get('/prefs')
-      const newsPrefs = data?.newsSources
+      const prefs = unwrap(data)
+      const newsPrefs = prefs?.newsSources
       if (newsPrefs && Array.isArray(newsPrefs)) {
         sources.value = newsPrefs
       }

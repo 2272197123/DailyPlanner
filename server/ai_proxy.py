@@ -7,17 +7,16 @@
 - 记录每次 AI 请求的 token 消耗
 """
 
-import json, os, time, re
-from datetime import date, timedelta
+import json, time, re
 from openai import OpenAI
 
+from server.config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, AI_MODEL
+
 # ═══════════════════════════════════════
-# 配置
+# 配置（来自 server.config，启动时已加载 .env）
 # ═══════════════════════════════════════
 
-DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
-DEEPSEEK_BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-MODEL = os.environ.get("DP_AI_MODEL", "deepseek-chat")  # V4 Flash 对应 deepseek-chat / deepseek-reasoner
+MODEL = AI_MODEL  # deepseek-chat / deepseek-reasoner
 
 _client: OpenAI | None = None
 
@@ -33,11 +32,12 @@ def _get_client() -> OpenAI:
 # Prompt 构建
 # ═══════════════════════════════════════
 
-def _build_prompt(for_date: str, day_mode: str, feedback: str, goal_id: str | None, db) -> str:
-    """构建发送给 AI 的提示词（中文大白话 + 完整示例）"""
+def _build_prompt(for_date: str, day_mode: str, feedback: str, goal_id: str | None, user_id: int) -> str:
+    """构建发送给 AI 的提示词（中文大白话 + 完整示例），数据按 user_id 隔离"""
+    from server.db import get_state
 
     # ── 档位配置 ──
-    mode_cfg_raw = db.get_state("modeCfg")
+    mode_cfg_raw = get_state(user_id, "modeCfg")
     try:
         mode_cfg = json.loads(mode_cfg_raw) if mode_cfg_raw else {
             "full":     {"label": "🔋 完整", "factor": 1.0,  "hours": "6-8h", "desc": "状态好，全力以赴。"},
@@ -53,7 +53,7 @@ def _build_prompt(for_date: str, day_mode: str, feedback: str, goal_id: str | No
         mode_lines.append(f"- {mc.get('label', k)}：系数 {mc.get('factor', 1)}（约 {mc.get('hours', '?')}）")
 
     # ── 长期目标 ──
-    goals_raw = db.get_state("biggoals")
+    goals_raw = get_state(user_id, "biggoals")
     try:
         goals = json.loads(goals_raw) if goals_raw else []
     except Exception:
@@ -260,7 +260,7 @@ def generate_daily_plan(for_date: str, day_mode: str = "full", feedback: str = "
     if not DEEPSEEK_API_KEY:
         return {"ok": False, "message": "未设置 DEEPSEEK_API_KEY 环境变量", "plan": None, "usage": None}
 
-    prompt = _build_prompt(for_date, day_mode, feedback, goal_id, db)
+    prompt = _build_prompt(for_date, day_mode, feedback, goal_id, user_id)
 
     client = _get_client()
     start = time.time()
@@ -325,23 +325,7 @@ def _log_ai_request(for_date: str, prompt: str, response_snippet: str, usage: di
         except Exception:
             return
     try:
-        # 确保表存在
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS ai_requests (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                target_date TEXT NOT NULL,
-                success     INTEGER DEFAULT 0,
-                prompt_tokens    INTEGER DEFAULT 0,
-                completion_tokens INTEGER DEFAULT 0,
-                total_tokens     INTEGER DEFAULT 0,
-                elapsed_sec REAL DEFAULT 0,
-                error_msg  TEXT,
-                prompt_snippet  TEXT,
-                response_snippet TEXT,
-                created_at TEXT DEFAULT (datetime('now','localtime'))
-            )
-        """)
-        db.commit()
+        # ai_requests 表由 db.init_tables() 统一创建（含 user_id 列）
         db.execute(
             "INSERT INTO ai_requests (user_id, target_date, success, prompt_tokens, completion_tokens, total_tokens, elapsed_sec, error_msg, prompt_snippet, response_snippet) "
             "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",

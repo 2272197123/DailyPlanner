@@ -1,16 +1,18 @@
 import { defineStore } from 'pinia'
 import { toLocalDate } from '@/utils/format'
-import api from '@/api/client'
+import api, { unwrap } from '@/api/client'
 
 export const useScheduleStore = defineStore('schedule', {
   state: () => ({
     currentDate: toLocalDate(new Date()),
     today: toLocalDate(new Date()),
     mode: 'full',
-    schedules: {},          // { [date]: { blocks, customBlocks, startTime, mode, ... } }
+    schedules: {},          // { [date]: { blocks, customBlocks, startTime, dayMode, encouragement, ... } }
     tasks: [],              // manually created tasks (global)
     routineProgress: {},    // { [date]: { [routineId]: true } }
-    timelineCfg: {},        // { [date]: { start, order } }
+    timelineCfg: {},        // { [date]: { start, order } }（legacy 本地缓存）
+    orderCfg: {},           // { [date]: { start, order } } — 服务端 /order/{date} 为准
+    earnedToday: {},        // { [date]: [itemId...] } — 当日已发放 XP 的条目（防刷分）
     loading: false
   }),
 
@@ -30,13 +32,15 @@ export const useScheduleStore = defineStore('schedule', {
       return 'present'
     },
     todaySchedule(state) {
-      return state.schedules[state.currentDate] || { blocks: [], mode: state.mode, startTime: '09:00' }
+      return state.schedules[state.currentDate] || { blocks: [], dayMode: state.mode, startTime: '09:00' }
     },
     todayBlocks(state) {
       const s = state.schedules[state.currentDate]
       return (s && s.blocks) ? s.blocks : []
     },
     timelineStart(state) {
+      const oc = state.orderCfg[state.currentDate]
+      if (oc && oc.start) return oc.start
       const cfg = state.timelineCfg[state.currentDate]
       return (cfg && cfg.start) ? cfg.start : '09:00'
     }
@@ -46,12 +50,29 @@ export const useScheduleStore = defineStore('schedule', {
     async fetchDay(date) {
       this.loading = true
       try {
-        const { data } = await api.get(`/plan/${date}`)
-        if (data) {
-          this.schedules[date] = data
+        // 并行拉取：计划 + 排序配置 + 当日已发放 XP 条目（后两者失败静默）
+        const [planResp, orderResp, earnedResp] = await Promise.all([
+          api.get(`/plan/${date}`),
+          api.get(`/order/${date}`).catch(() => null),
+          api.get(`/earned/${date}`).catch(() => null)
+        ])
+        // 响应为 {ok, data} 包裹；无计划时 data 为 null → 展示"今日无事"
+        const plan = unwrap(planResp.data)
+        if (plan) {
+          this.schedules[date] = plan
+        } else {
+          delete this.schedules[date]
+        }
+        const order = orderResp ? unwrap(orderResp.data) : null
+        if (order && (order.start || Array.isArray(order.order))) {
+          this.orderCfg[date] = order
+        }
+        const earned = earnedResp ? earnedResp.data?.earned : null
+        if (Array.isArray(earned)) {
+          this.earnedToday[date] = earned
         }
         this.loading = false
-        return data
+        return plan
       } catch {
         // Fall back to localStorage
         try {
@@ -70,7 +91,11 @@ export const useScheduleStore = defineStore('schedule', {
       const sched = this.schedules[date]
       if (!sched) return
       try {
-        await api.put(`/plan/${date}`, sched)
+        // 后端 save_plan 读取 dayMode/energyLevel/specialNotes/blocks/routines/customBlocks/priorityShift/encouragement
+        await api.put(`/plan/${date}`, {
+          ...sched,
+          dayMode: sched.dayMode || sched.mode || this.mode
+        })
       } catch { /* silent */ }
       // Local cache
       try {
@@ -92,24 +117,18 @@ export const useScheduleStore = defineStore('schedule', {
     prevDay() {
       const d = new Date(this.currentDate + 'T00:00:00')
       d.setDate(d.getDate() - 1)
-      this.currentDate = d.toISOString().slice(0, 10)
+      this.currentDate = toLocalDate(d)
     },
 
     nextDay() {
       const d = new Date(this.currentDate + 'T00:00:00')
       d.setDate(d.getDate() + 1)
-      this.currentDate = d.toISOString().slice(0, 10)
-    },
-
-    setMode(mode) {
-      if (['full', 'minimum', 'recovery'].includes(mode)) {
-        this.mode = mode
-      }
+      this.currentDate = toLocalDate(d)
     },
 
     addBlock(date, block) {
       if (!this.schedules[date]) {
-        this.schedules[date] = { blocks: [], mode: this.mode, startTime: '09:00' }
+        this.schedules[date] = { blocks: [], dayMode: this.mode, startTime: '09:00' }
       }
       this.schedules[date].blocks.push(block)
       this.saveDay(date)
@@ -141,10 +160,19 @@ export const useScheduleStore = defineStore('schedule', {
       block.completed = !block.completed
       if (block.completed) {
         block.completedAt = new Date().toISOString()
-        // Mark all subtasks done
-        if (block.subtasks) block.subtasks.forEach(st => { st.done = true })
+        // 快照子任务完成状态，撤销时还原（而不是保留全 done）
+        if (block.subtasks) {
+          block._prevSubtaskDone = block.subtasks.map(st => !!st.done)
+          block.subtasks.forEach(st => { st.done = true })
+        }
       } else {
         block.completedAt = null
+        if (block.subtasks && Array.isArray(block._prevSubtaskDone)) {
+          block.subtasks.forEach((st, i) => {
+            st.done = block._prevSubtaskDone[i] ?? st.done
+          })
+          delete block._prevSubtaskDone
+        }
       }
       this.saveDay(date)
       return block.completed
@@ -163,7 +191,7 @@ export const useScheduleStore = defineStore('schedule', {
 
     importPlan(date, blocks) {
       if (!this.schedules[date]) {
-        this.schedules[date] = { blocks: [], mode: this.mode, startTime: '09:00' }
+        this.schedules[date] = { blocks: [], dayMode: this.mode, startTime: '09:00' }
       }
       // Merge: deduplicate by id
       const existingIds = new Set(this.schedules[date].blocks.map(b => b.id))
@@ -174,19 +202,79 @@ export const useScheduleStore = defineStore('schedule', {
       return newBlocks.length
     },
 
-    setTimelineStart(date, time) {
-      if (!this.timelineCfg[date]) this.timelineCfg[date] = {}
-      this.timelineCfg[date].start = time
+    /* ── 固定事务打卡：服务端持久化 + 本地缓存 ── */
+    async fetchRoutineProgress(date) {
+      try {
+        const { data } = await api.get(`/routine-done/${date}`)
+        const done = unwrap(data) || {}
+        this.routineProgress[date] = { ...(this.routineProgress[date] || {}), ...done }
+      } catch { /* keep local cache */ }
     },
 
-    /** Calculate cumulative start times */
+    setRoutineDone(date, routineId, done) {
+      if (!this.routineProgress[date]) this.routineProgress[date] = {}
+      this.routineProgress[date][routineId] = done
+      try {
+        localStorage.setItem('dp_routineProgress', JSON.stringify(this.routineProgress))
+      } catch { /* ignore */ }
+      api.put(`/routine-done/${date}/${routineId}`, { done }).catch(() => {})
+    },
+
+    /* ── 排序 / 起点持久化（PUT /order/{date}，body {start, order:[blockId...]}）── */
+    _persistOrderCfg(date) {
+      const cfg = this.orderCfg[date]
+      if (!cfg) return
+      api.put(`/order/${date}`, { start: cfg.start || '09:00', order: cfg.order || [] }).catch(() => {})
+    },
+
+    setTimelineStart(date, time) {
+      const blocks = this.schedules[date]?.blocks || []
+      const existing = this.orderCfg[date]
+      this.orderCfg[date] = {
+        start: time,
+        order: Array.isArray(existing?.order) && existing.order.length
+          ? existing.order
+          : blocks.map(b => b.id)
+      }
+      this._persistOrderCfg(date)
+    },
+
+    applyOrder(date, orderIds) {
+      const existing = this.orderCfg[date]
+      this.orderCfg[date] = {
+        start: existing?.start || this.timelineCfg[date]?.start || '09:00',
+        order: orderIds
+      }
+      this._persistOrderCfg(date)
+    },
+
+    /* ── XP 防刷分：每个条目每天只发一次（服务端幂等）── */
+    awardOnce(date, itemId) {
+      const earned = this.earnedToday[date] || []
+      if (earned.includes(itemId)) return false
+      this.earnedToday[date] = [...earned, itemId]
+      api.post(`/earned/${date}/${itemId}`).catch(() => {})
+      return true
+    },
+
+    /** Calculate cumulative start times（先按 orderCfg 排序，再推算 _startMin） */
     getComputedTimeline(date) {
       const sched = this.schedules[date]
       if (!sched || !sched.blocks) return []
+      const order = this.orderCfg[date]?.order
+      let blocks = sched.blocks
+      if (Array.isArray(order) && order.length) {
+        const rank = new Map(order.map((id, i) => [id, i]))
+        blocks = [...sched.blocks].sort((a, b) => {
+          const ra = rank.has(a.id) ? rank.get(a.id) : order.length
+          const rb = rank.has(b.id) ? rank.get(b.id) : order.length
+          return ra - rb
+        })
+      }
       const startTime = this.timelineStart
       const [sh, sm] = startTime.split(':').map(Number)
       let cursor = sh * 60 + sm
-      return sched.blocks.map(block => {
+      return blocks.map(block => {
         const dur = block.duration || 30
         const start = cursor
         cursor += dur

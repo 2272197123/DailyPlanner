@@ -3,21 +3,38 @@ import { computed, onMounted, ref } from 'vue'
 import { useScheduleStore } from '@/stores/schedule'
 import { useMoodStore } from '@/stores/mood'
 import { useCurrencyStore } from '@/stores/currency'
+import { useAccountingStore } from '@/stores/accounting'
+import { useNewsStore } from '@/stores/news'
+import { toLocalDate } from '@/utils/format'
 import { useAnime } from '@/composables/useAnime'
 
 const scheduleStore = useScheduleStore()
 const moodStore = useMoodStore()
 const currencyStore = useCurrencyStore()
+const accountingStore = useAccountingStore()
+const newsStore = useNewsStore()
 const { staggerEnter } = useAnime()
 
 const mounted = ref(false)
 
 const todayBlocks = computed(() => scheduleStore.todayBlocks || [])
-const completedCount = computed(() => todayBlocks.value.filter(b => b.done).length)
+const completedCount = computed(() => todayBlocks.value.filter(b => b.completed).length)
 const totalCount = computed(() => todayBlocks.value.length)
 const progress = computed(() => totalCount.value ? (completedCount.value / totalCount.value) * 100 : 0)
 const todayMood = computed(() => moodStore.todayMood)
 const balance = computed(() => currencyStore.balance || 0)
+
+/* ── 本月收支（真实记账数据）── */
+const monthSummary = computed(() => {
+  const month = toLocalDate(new Date()).slice(0, 7)
+  const entries = (accountingStore.entries || []).filter(e => e.date && e.date.startsWith(month))
+  const income = entries.filter(e => e.type === 'income').reduce((s, e) => s + (e.amount || 0), 0)
+  const expense = entries.filter(e => e.type === 'expense').reduce((s, e) => s + (e.amount || 0), 0)
+  return { income, expense }
+})
+
+/* ── 科技热点（当前为内置示例数据，如实标注来源）── */
+const topNews = computed(() => (newsStore.filteredItems || []).slice(0, 3))
 
 const greeting = computed(() => {
   const hour = new Date().getHours()
@@ -30,6 +47,8 @@ const greeting = computed(() => {
 
 onMounted(() => {
   scheduleStore.fetchDay(scheduleStore.currentDate)
+  accountingStore.fetchEntries()
+  newsStore.loadSources()
   mounted.value = true
   requestAnimationFrame(() => {
     staggerEnter('.dash-card', document.querySelector('.dashboard-view'))
@@ -76,19 +95,23 @@ onMounted(() => {
       <div class="dash-card card">
         <div class="card-icon">¤</div>
         <div class="card-meta">
-          <div class="card-value">--</div>
-          <div class="card-label">本月收支</div>
+          <div class="card-value">¥{{ monthSummary.expense.toFixed(0) }}</div>
+          <div class="card-label">本月支出</div>
         </div>
-        <div class="card-hint">记账模块开发中</div>
+        <div class="card-hint">收入 ¥{{ monthSummary.income.toFixed(0) }} · 结余 ¥{{ (monthSummary.income - monthSummary.expense).toFixed(0) }}</div>
       </div>
 
       <div class="dash-card card">
         <div class="card-icon">✦</div>
         <div class="card-meta">
-          <div class="card-value">--</div>
+          <div class="card-value">{{ topNews.length }} 条</div>
           <div class="card-label">科技热点</div>
         </div>
-        <div class="card-hint">新闻源配置中</div>
+        <div class="card-hint news-hint">
+          <div v-for="item in topNews" :key="item.id" class="news-line">
+            <span class="news-src">[{{ item.source }}]</span> {{ item.title }}
+          </div>
+        </div>
       </div>
     </div>
 
@@ -231,6 +254,22 @@ onMounted(() => {
   grid-column: 1 / -1;
   font-size: var(--text-xs);
   color: var(--text-muted);
+}
+
+.news-hint {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.news-line {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.news-src {
+  color: var(--text-secondary);
 }
 
 .dash-section {

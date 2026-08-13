@@ -1,15 +1,15 @@
 @echo off
 chcp 65001 >nul
-title DailyPlan v10.0
-cd /d "%~dp0study_planner"
+title DailyPlan
+cd /d "%~dp0"
 
 echo.
-echo   DailyPlan v10.0 — Vue 3 + FastAPI
+echo   DailyPlan — Vue 3 + FastAPI
 echo   http://localhost:5000
 echo.
 echo   DO NOT CLOSE THIS WINDOW.
 echo.
 
-python launcher.py
+python -m uvicorn server.main:app --host 0.0.0.0 --port 5000
 
 pause

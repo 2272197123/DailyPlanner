@@ -147,9 +147,29 @@ export const useArchiveStore = defineStore('archive', {
       return (json.choices && json.choices[0] && json.choices[0].message) ? json.choices[0].message.content : null
     },
 
+    /** Delete the archived review for a date (local + server) */
+    async deleteReview(date) {
+      delete this.reviewData[date]
+      // 清本地缓存中的 archiveData（保留其他字段）
+      try {
+        const key = 'dp_day_data_' + date
+        const raw = localStorage.getItem(key)
+        if (raw) {
+          const data = JSON.parse(raw)
+          delete data.archiveData
+          localStorage.setItem(key, JSON.stringify(data))
+        }
+      } catch { /* ignore */ }
+      // 服务端：day-data 是覆盖式整写，先 GET 合并再 PUT，仅清 archiveData
+      try {
+        const resp = await api.get(`/day-data/${date}`)
+        const existing = (resp.data && resp.data.data) || {}
+        await api.put(`/day-data/${date}`, { ...existing, archiveData: null })
+      } catch { /* silent */ }
+    },
+
     /** Set AI persona prompt */
-    setAiPersona(prompt) {
-      this.aiPersonaPrompt = prompt
+    setAiPersona(prompt) {      this.aiPersonaPrompt = prompt
       this._persistPrefs()
     },
 

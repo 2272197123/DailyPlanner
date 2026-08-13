@@ -109,16 +109,25 @@ class PrefsUpdate(BaseModel):
 # 用户认证（v8.0）
 # ═══════════════════════════════════════
 
+class SendEmailCode(BaseModel):
+    email: str = Field(..., min_length=5, max_length=200)
+
+
 class UserCreate(BaseModel):
-    username: str = Field(..., min_length=2, max_length=30)
-    password: str = Field(..., min_length=4)
-    email: str = ""
+    email: str = Field(..., min_length=5, max_length=200)
+    emailCode: str = Field(..., min_length=4, max_length=10)
+    password: str = Field(..., min_length=8)
+    nickname: str = Field("", max_length=30)
     inviteCode: str = ""
 
 
 class UserLogin(BaseModel):
-    username: str
+    email: str
     password: str
+
+
+class ProfileUpdate(BaseModel):
+    nickname: str = Field(..., min_length=1, max_length=30)
 
 
 class AuthResponse(BaseModel):
@@ -131,6 +140,20 @@ class AuthResponse(BaseModel):
 
 class TokenRefresh(BaseModel):
     refresh_token: str
+
+
+class UserOut(BaseModel):
+    """管理员后台的用户列表项"""
+    id: int
+    username: str
+    email: str = ""
+    role: str = "user"
+    disabled: bool = False
+    created_at: Optional[str] = None
+
+
+class AdminResetPassword(BaseModel):
+    new_password: str = Field(..., min_length=8)
 
 
 # ═══════════════════════════════════════

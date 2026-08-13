@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
-import api from '@/api/client'
+import api, { unwrap } from '@/api/client'
+import { toLocalDate } from '@/utils/format'
 
 export const useAccountingStore = defineStore('accounting', {
   state: () => ({
@@ -21,14 +22,14 @@ export const useAccountingStore = defineStore('accounting', {
 
     periodRange() {
       const now = new Date()
-      const today = now.toISOString().slice(0, 10)
+      const today = toLocalDate(now)
       let from = today
 
       switch (this.period) {
         case 'week': {
           const d = new Date(now)
           d.setDate(d.getDate() - d.getDay())
-          from = d.toISOString().slice(0, 10)
+          from = toLocalDate(d)
           break
         }
         case 'month': from = today.slice(0, 7) + '-01'; break
@@ -93,7 +94,8 @@ export const useAccountingStore = defineStore('accounting', {
       this.loading = true
       try {
         const { data } = await api.get('/ledger')
-        if (data && Array.isArray(data)) this.entries = data
+        const list = unwrap(data)
+        if (Array.isArray(list)) this.entries = list
       } catch (err) {
         console.warn('Failed to fetch ledger:', err)
         try {

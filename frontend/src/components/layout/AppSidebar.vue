@@ -1,24 +1,51 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useMoodStore, MOOD_PRESETS } from '@/stores/mood'
+import { useAuthStore } from '@/stores/auth'
+import { useCurrencyStore } from '@/stores/currency'
 import { useAnime } from '@/composables/useAnime'
+import { toLocalDate } from '@/utils/format'
 
 const route = useRoute()
+const router = useRouter()
 const moodStore = useMoodStore()
+const auth = useAuthStore()
+const currencyStore = useCurrencyStore()
 const { burst, runPreset } = useAnime()
 
 const collapsed = ref(false)
 const ventText = ref('')
 
-const navItems = [
-  { name: 'dashboard', title: '总览', icon: '□' },
-  { name: 'plan', title: '计划', icon: '☑' },
-  { name: 'ledger', title: '记账', icon: '¤' },
-  { name: 'mood', title: '心情', icon: '◉' },
-  { name: 'news', title: '热点', icon: '✦' },
-  { name: 'settings', title: '设置', icon: '⚙' }
-]
+const navItems = computed(() => {
+  const items = [
+    { name: 'dashboard', title: '总览', icon: '□' },
+    { name: 'plan', title: '计划', icon: '☑' },
+    { name: 'ledger', title: '记账', icon: '¤' },
+    { name: 'mood', title: '心情', icon: '◉' },
+    { name: 'news', title: '热点', icon: '✦' },
+    { name: 'settings', title: '设置', icon: '⚙' }
+  ]
+  if (auth.isAdmin) {
+    items.push({ name: 'admin', title: '后台管理', icon: '⚑' })
+  }
+  return items
+})
+
+async function handleLogout() {
+  await auth.logout()
+  router.push({ name: 'login' })
+}
+
+/* 昵称优先，回退邮箱/用户名 */
+const displayName = computed(() =>
+  auth.user?.nickname || auth.user?.email || auth.user?.username || '未登录'
+)
+
+const footerInitial = computed(() => {
+  const name = displayName.value
+  return name === '未登录' ? '?' : (name.trim().charAt(0).toUpperCase() || '?')
+})
 
 const isActive = (name) => route.name === name
 
@@ -28,7 +55,7 @@ const recentDates = computed(() => {
   for (let i = 83; i >= 0; i--) {
     const d = new Date(today)
     d.setDate(d.getDate() - i)
-    dates.push(d.toISOString().split('T')[0])
+    dates.push(toLocalDate(d))
   }
   return dates
 })
@@ -162,6 +189,24 @@ watch(() => route.name, () => {
     </div>
 
     <div v-if="!collapsed" class="sidebar-footer">
+      <div class="footer-level" title="等级随累计 XP 提升">
+        <span class="level-badge">Lv.{{ currencyStore.level }}</span>
+        <div class="level-track">
+          <div class="level-bar" :style="{ width: currencyStore.levelProgress + '%' }"></div>
+        </div>
+        <span class="level-xp">{{ currencyStore.balance }} XP</span>
+      </div>
+      <div class="footer-user">
+        <span class="footer-avatar">
+          <img v-if="auth.user?.avatar" :src="auth.user.avatar" class="footer-avatar-img" alt="" />
+          <span v-else class="footer-avatar-initial">{{ footerInitial }}</span>
+        </span>
+        <span class="footer-username" :title="auth.user?.email || ''">
+          {{ displayName }}
+          <em v-if="auth.isGuest" class="guest-tag">游客</em>
+        </span>
+        <button class="btn btn-ghost btn-sm" @click="handleLogout">退出登录</button>
+      </div>
       <span class="footer-hint">Ctrl+Enter 快捷发送</span>
     </div>
   </aside>
@@ -372,6 +417,105 @@ watch(() => route.name, () => {
 
 .sidebar-footer {
   text-align: center;
+}
+
+.footer-level {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+}
+
+.level-badge {
+  font-family: var(--font-data);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-muted);
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.level-track {
+  flex: 1;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--bg-muted);
+  overflow: hidden;
+}
+
+.level-bar {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  transition: width var(--duration-normal) var(--ease-out);
+}
+
+.level-xp {
+  font-family: var(--font-data);
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.footer-user {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+}
+
+.footer-avatar {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  background: var(--accent-muted);
+  border: 1px solid var(--border);
+}
+
+.footer-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.footer-avatar-initial {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.footer-username {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guest-tag {
+  font-style: normal;
+  margin-left: var(--space-1);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  background: var(--warning-bg);
+  color: var(--warning);
 }
 
 .footer-hint {

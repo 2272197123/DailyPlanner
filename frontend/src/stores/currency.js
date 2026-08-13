@@ -48,7 +48,8 @@ export const useCurrencyStore = defineStore('currency', {
 
     _persist() {
       localStorage.setItem('dp_balance', String(this.balance))
-      api.setBalance(this.balance).catch(() => {})
+      // PUT /balance body {balance: number} → {ok:true}
+      api.put('/balance', { balance: this.balance }).catch(() => {})
     },
 
     recordTransaction(type, amount, reason, refId) {
@@ -64,20 +65,20 @@ export const useCurrencyStore = defineStore('currency', {
       localStorage.setItem('dp_ledger', JSON.stringify(this.transactions))
     },
 
-    async fetchLedger() {
+    /**
+     * 注意：XP 交易流水没有对应的后端端点（/api/ledger 是记账流水，语义不同）。
+     * 这里只读取 localStorage 本地缓存，不做服务端拉取。
+     */
+    fetchLedger() {
       this.loading = true
       try {
-        const { data } = await api.get('/ledger')
-        this.transactions = data
-        this.loading = false
-        return data
-      } catch {
-        // Fall back to LS
         const raw = localStorage.getItem('dp_ledger')
         if (raw) this.transactions = JSON.parse(raw)
-        this.loading = false
-        return this.transactions
+      } catch {
+        this.transactions = []
       }
+      this.loading = false
+      return this.transactions
     },
 
     initFromCache() {

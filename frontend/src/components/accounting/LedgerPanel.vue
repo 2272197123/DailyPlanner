@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useAccountingStore } from '@/stores/accounting'
 import { useToastStore } from '@/stores/toast'
+import { toLocalDate } from '@/utils/format'
 
 const accountingStore = useAccountingStore()
 const toastStore = useToastStore()
@@ -9,7 +10,7 @@ const toastStore = useToastStore()
 const showAddForm = ref(false)
 const pieCanvas = ref(null)
 const barCanvas = ref(null)
-const newEntry = ref({ type: 'expense', category: '', amount: '', date: new Date().toISOString().slice(0, 10), description: '' })
+const newEntry = ref({ type: 'expense', category: '', amount: '', date: toLocalDate(new Date()), description: '' })
 
 /* ── Computed ── */
 const summary = computed(() => accountingStore.summary)
@@ -131,7 +132,7 @@ async function handleAdd() {
     date: newEntry.value.date,
     description: newEntry.value.description
   })
-  newEntry.value = { type: 'expense', category: '', amount: '', date: new Date().toISOString().slice(0, 10), description: '' }
+  newEntry.value = { type: 'expense', category: '', amount: '', date: toLocalDate(new Date()), description: '' }
   showAddForm.value = false
   toastStore.ok('已添加')
   await nextTick()

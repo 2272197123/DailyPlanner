@@ -1,6 +1,8 @@
 <script setup>
 import { computed, ref, watch, nextTick } from 'vue'
 import { useMoodStore } from '@/stores/mood'
+import { useToastStore } from '@/stores/toast'
+import { toLocalDate } from '@/utils/format'
 import { useAnime } from '@/composables/useAnime'
 import MoodCell from './MoodCell.vue'
 import MoodPicker from './MoodPicker.vue'
@@ -12,11 +14,15 @@ const props = defineProps({
 })
 
 const moodStore = useMoodStore()
+const toastStore = useToastStore()
 const { staggerEnter, burst } = useAnime()
 
 const gridRef = ref(null)
 const pickerOpen = ref(false)
 const pickerDate = ref('')
+
+/* ── 已填写格子的小菜单（修改 / 清除记录）── */
+const cellMenu = ref(null) // { date, x, y }
 
 const months = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月']
 const weekDays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
@@ -26,7 +32,7 @@ const yearDates = computed(() => {
   const start = new Date(props.year, 0, 1)
   const end = new Date(props.year, 11, 31)
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    dates.push(new Date(d).toISOString().split('T')[0])
+    dates.push(toLocalDate(new Date(d)))
   }
   return dates
 })
@@ -54,16 +60,54 @@ function getMood(date) {
   return date ? moodStore.getEntry(date) : null
 }
 
-function onCellClick(date, event) {
-  if (!date) return
+function openPicker(date, event) {
   pickerDate.value = date
   pickerOpen.value = true
 
-  const rect = event.target.getBoundingClientRect()
-  burst(rect.left + rect.width / 2, rect.top + rect.height / 2, {
-    count: 10,
-    colors: ['#f59e0b', '#3b82f6', '#10b981', '#ef4444', '#8b5cf6']
-  })
+  if (event && event.target) {
+    const rect = event.target.getBoundingClientRect()
+    burst(rect.left + rect.width / 2, rect.top + rect.height / 2, {
+      count: 10,
+      colors: ['#f59e0b', '#3b82f6', '#10b981', '#ef4444', '#8b5cf6']
+    })
+  }
+}
+
+function onCellClick(date, event) {
+  if (!date) return
+
+  // 已填写 → 弹出小菜单（修改 / 清除记录）
+  if (getMood(date)) {
+    const rect = event.target.getBoundingClientRect()
+    cellMenu.value = {
+      date,
+      x: Math.min(rect.left, window.innerWidth - 160),
+      y: rect.bottom + 6
+    }
+    return
+  }
+
+  // 过去日期的空白格子 → 防止误点，需确认补记（当天不确认）
+  if (date < moodStore.today) {
+    const d = new Date(date + 'T00:00:00')
+    if (!window.confirm(`要为 ${d.getMonth() + 1}月${d.getDate()}日 补记心情吗？`)) return
+  }
+
+  openPicker(date, event)
+}
+
+function onMenuEdit() {
+  if (!cellMenu.value) return
+  pickerDate.value = cellMenu.value.date
+  pickerOpen.value = true
+  cellMenu.value = null
+}
+
+async function onMenuClear() {
+  if (!cellMenu.value) return
+  await moodStore.deleteMood(cellMenu.value.date)
+  toastStore.ok('已清除该日心情记录')
+  cellMenu.value = null
 }
 
 async function onSaveMood(payload) {
@@ -129,6 +173,16 @@ watch(() => props.year, async (newYear) => {
       @save="onSaveMood"
       @delete="onDeleteMood"
     />
+
+    <!-- 已填写格子的操作小菜单 -->
+    <Teleport to="body">
+      <div v-if="cellMenu" class="mood-menu-overlay" @click.self="cellMenu = null">
+        <div class="mood-menu" :style="{ left: `${cellMenu.x}px`, top: `${cellMenu.y}px` }">
+          <button class="mood-menu-item" @click="onMenuEdit">✏️ 修改</button>
+          <button class="mood-menu-item danger" @click="onMenuClear">🗑 清除记录</button>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -179,5 +233,45 @@ watch(() => props.year, async (newYear) => {
 .mood-week {
   display: flex;
   flex-direction: column;
+}
+
+/* ── 格子操作小菜单 ── */
+.mood-menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dropdown);
+}
+
+.mood-menu {
+  position: fixed;
+  min-width: 140px;
+  padding: var(--space-1);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.mood-menu-item {
+  display: block;
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  text-align: left;
+  color: var(--text-primary);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.mood-menu-item:hover {
+  background: var(--bg-muted);
+}
+
+.mood-menu-item.danger {
+  color: var(--danger);
+}
+
+.mood-menu-item.danger:hover {
+  background: var(--danger-bg);
 }
 </style>

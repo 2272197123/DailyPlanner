@@ -38,6 +38,12 @@ dailyplan.db-shm
 dailyplan.db-wal
 *.db-journal
 
+# 前端构建产物（vite build 输出，由 Docker/CI 生成，不入库）
+server/static/
+
+# 用户上传文件（头像等）
+data/
+
 # Fuse filesystem artifacts
 .fuse_hidden*
 

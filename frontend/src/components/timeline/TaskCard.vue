@@ -71,6 +71,14 @@ const editForm = ref({
   note: ''
 })
 
+/* ── 子任务折叠（默认收起，标题行显示进度）── */
+const subsExpanded = ref(false)
+
+function toggleSubs(e) {
+  e.stopPropagation()
+  subsExpanded.value = !subsExpanded.value
+}
+
 /* ── Computed display ── */
 const subCount = computed(() => (props.block.subtasks || []).length)
 const doneCount = computed(() => (props.block.subtasks || []).filter(s => s.done).length)
@@ -114,7 +122,6 @@ function handleDelete() {
 
 <template>
   <div
-    :id="'card-' + block.id"
     class="task-card"
     :class="{
       'card-completed': block.completed,
@@ -131,7 +138,7 @@ function handleDelete() {
     </div>
 
     <!-- Card body -->
-    <div class="card-body" @click.self="emit('toggle', block.id)">
+    <div class="card-body" @click.self="emit('toggle', block.id, $event)">
       <!-- Header row -->
       <div class="card-header">
         <span class="card-icon">{{ catEmoji }}</span>
@@ -158,28 +165,27 @@ function handleDelete() {
       <!-- Note -->
       <div class="card-note" v-if="block.note">{{ block.note }}</div>
 
-      <!-- Subtask list -->
-      <div class="card-subtasks" v-if="block.subtasks && block.subtasks.length">
+      <!-- Subtasks: 折叠头部（进度条 + n/m）+ 可展开列表 -->
+      <div class="card-subtasks-head" v-if="subCount > 0" @click.stop="toggleSubs">
+        <div class="cp-bar">
+          <div class="cp-fill" :style="{ width: subPct + '%', background: subGradient }"></div>
+        </div>
+        <span class="cp-text">{{ doneCount }}/{{ subCount }}</span>
+        <span class="cst-chevron" :class="{ open: subsExpanded }">▸</span>
+      </div>
+      <div class="card-subtasks" v-if="subCount > 0 && subsExpanded">
         <div
           v-for="(st, si) in block.subtasks"
           :key="'st-' + si"
           class="cst-item"
           :class="{ done: st.done }"
-          @click.stop="emit('toggleSubtask', si)"
+          @click.stop="emit('toggleSubtask', si, $event)"
         >
           <span class="cst-check" :class="{ checked: st.done }">
             <span v-if="st.done">✓</span>
           </span>
           <span class="cst-text">{{ st.text }}</span>
         </div>
-      </div>
-
-      <!-- Progress bar -->
-      <div class="card-progress" v-if="subCount > 0">
-        <div class="cp-bar">
-          <div class="cp-fill" :style="{ width: subPct + '%', background: subGradient }"></div>
-        </div>
-        <span class="cp-text">{{ doneCount }}/{{ subCount }}</span>
       </div>
 
       <!-- Inline timer -->
@@ -447,6 +453,32 @@ function handleDelete() {
 .cst-item.done .cst-text {
   text-decoration: line-through;
   color: var(--text-muted);
+}
+
+/* ── Subtasks collapse header ── */
+.card-subtasks-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  cursor: pointer;
+  user-select: none;
+}
+
+.card-subtasks-head:hover .cst-chevron {
+  color: var(--accent);
+}
+
+.cst-chevron {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  transition: transform var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out);
+  flex-shrink: 0;
+}
+
+.cst-chevron.open {
+  transform: rotate(90deg);
 }
 
 /* ── Progress bar ── */

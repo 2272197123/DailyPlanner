@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import api from '@/api/client'
+import api, { unwrap } from '@/api/client'
+import { toLocalDate } from '@/utils/format'
 
 export const MOOD_PRESETS = [
   { id: 'joy', label: '开心', color: '#f59e0b' },
@@ -19,7 +20,7 @@ export const useMoodStore = defineStore('mood', () => {
   const customColors = ref([])
   const loading = ref(false)
 
-  const today = computed(() => new Date().toISOString().split('T')[0])
+  const today = computed(() => toLocalDate(new Date()))
 
   const todayMood = computed(() => entries.value[today.value] || null)
 
@@ -53,9 +54,10 @@ export const useMoodStore = defineStore('mood', () => {
     loading.value = true
     try {
       const { data } = await api.get('/moods', { params: { year } })
-      if (data && Array.isArray(data)) {
+      const list = unwrap(data)
+      if (Array.isArray(list)) {
         const mapped = {}
-        data.forEach(item => {
+        list.forEach(item => {
           mapped[item.date] = item
         })
         entries.value = { ...entries.value, ...mapped }
@@ -70,7 +72,8 @@ export const useMoodStore = defineStore('mood', () => {
   async function saveMood(date, payload) {
     setEntry(date, payload)
     try {
-      await api.put(`/mood/${date}`, payload)
+      // 后端 MoodEntry 要求 payload 含 date 字段
+      await api.put(`/mood/${date}`, { date, ...payload })
     } catch (err) {
       console.warn('Failed to save mood:', err)
     }

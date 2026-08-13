@@ -1,63 +1,78 @@
 # ═══════════════════════════════════════
-# DailyPlan Docker Compose（v8.0）
+# DailyPlan Docker Compose（v12.0）
 #
-# 启动: docker compose up -d
-# 停止: docker compose down
-# 查看日志: docker compose logs -f app
+# 启动: docker compose up -d              # App + MySQL
+# 生产: docker compose --profile production up -d   # 再加 Nginx
+# 日志: docker compose logs -f app
 #
-# 默认数据库: PostgreSQL（生产推荐）
-# 开发模式: 设 DP_DB_TYPE=sqlite 并注释 db 服务
+# 变量从同目录 .env 读取（cp .env.example .env）。
+# 带 :? 的变量缺失时 compose 会直接报错，拒绝以弱默认值启动。
 # ═══════════════════════════════════════
 
-version: "3.9"
-
 services:
-  # ── FastAPI 应用服务 ──
+  # ── FastAPI 应用（含前端产物） ──
   app:
     build: .
     container_name: dailyplan-app
     restart: unless-stopped
     ports:
-      - "5000:5000"
+      - "5000:5000"   # 启用 nginx 后可删除此端口映射
     environment:
-      # 数据库
-      - DP_DB_TYPE=postgres
-      - DP_POSTGRES_HOST=db
-      - DP_POSTGRES_PORT=5432
-      - DP_POSTGRES_USER=dailyplan
-      - DP_POSTGRES_PASSWORD=${DB_PASSWORD:-dailyplan}
-      - DP_POSTGRES_DB=dailyplan
-      # AI（填入你的 Key）
+      - DP_ENV=production
+      # 数据库（MySQL）
+      - DP_DB_TYPE=mysql
+      - DP_MYSQL_HOST=db
+      - DP_MYSQL_PORT=3306
+      - DP_MYSQL_USER=dailyplan
+      - DP_MYSQL_PASSWORD=${DP_MYSQL_PASSWORD:?请在 .env 中设置 DP_MYSQL_PASSWORD}
+      - DP_MYSQL_DB=dailyplan
+      # 安全（JWT 签名 + 敏感配置加密密钥）
+      - DP_SECRET_KEY=${DP_SECRET_KEY:?请在 .env 中设置 DP_SECRET_KEY（≥32 位随机串）}
+      # 注册模式
+      - DP_REGISTRATION_MODE=${DP_REGISTRATION_MODE:-invite_only}
+      # AI（可选）
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
-      # 安全
-      - DP_SECRET_KEY=${DP_SECRET_KEY:-change-me-in-production}
+      - DP_AI_MODEL=${DP_AI_MODEL:-deepseek-chat}
+      # 日志
+      - DP_LOG_LEVEL=${DP_LOG_LEVEL:-INFO}
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      - appdata:/app/data   # 用户上传文件（头像）
     networks:
       - dailyplan-net
 
-  # ── PostgreSQL 数据库 ──
+  # ── MySQL 8（2C2G 轻量服务器调优） ──
   db:
-    image: postgres:16-alpine
+    image: mysql:8.0
     container_name: dailyplan-db
     restart: unless-stopped
+    command:
+      - --innodb-buffer-pool-size=128M
+      - --performance-schema=OFF
+      - --skip-log-bin
+      - --max-connections=50
+      - --table-open-cache=200
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
     environment:
-      - POSTGRES_USER=dailyplan
-      - POSTGRES_PASSWORD=${DB_PASSWORD:-dailyplan}
-      - POSTGRES_DB=dailyplan
+      - MYSQL_ROOT_PASSWORD=${DP_MYSQL_ROOT_PASSWORD:?请在 .env 中设置 DP_MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=dailyplan
+      - MYSQL_USER=dailyplan
+      - MYSQL_PASSWORD=${DP_MYSQL_PASSWORD:?请在 .env 中设置 DP_MYSQL_PASSWORD}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - mysqldata:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dailyplan"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -p$$MYSQL_ROOT_PASSWORD --silent"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 12
     networks:
       - dailyplan-net
 
-  # ── Nginx 反向代理（可选，需要 HTTPS 时启用） ──
+  # ── Nginx 反向代理（production profile，可选） ──
   nginx:
     image: nginx:alpine
     container_name: dailyplan-nginx
@@ -67,17 +82,18 @@ services:
       - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      # 证书目录（生产环境挂载真实证书）
+      # HTTPS 证书（取消注释并放入证书后，同时启用 nginx.conf 中的 443 server）
       # - ./ssl:/etc/nginx/ssl:ro
     depends_on:
       - app
     networks:
       - dailyplan-net
     profiles:
-      - production  # 仅 production profile 时启用
+      - production
 
 volumes:
-  pgdata:
+  mysqldata:
+  appdata:
 
 networks:
   dailyplan-net:

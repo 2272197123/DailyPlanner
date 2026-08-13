@@ -16,7 +16,13 @@ v11.0: 多用户数据隔离 — 所有表加入 user_id 列，所有业务函�
 """
 
 import os, json, sys, re, secrets, string
+from datetime import datetime, timedelta
 from pathlib import Path
+
+from dotenv import load_dotenv
+
+# 独立使用 db.py 时也能读到项目根目录的 .env
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 # ═══════════════════════════════════════
 # 环境检测
@@ -79,23 +85,26 @@ class DBInterface:
 
 class SQLiteDB(DBInterface):
     def __init__(self):
+        import threading
         db_dir = Path(__file__).resolve().parent
         db_dir.mkdir(parents=True, exist_ok=True)
         self.db_path = str(db_dir / "dailyplan.db")
         self.conn = None
+        self._lock = threading.RLock()  # 单连接跨线程共享，RLock 保证 execute/fetch/commit 原子性
 
     def connect(self):
         import sqlite3
-        self.conn = sqlite3.connect(self.db_path)
+        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA foreign_keys=ON")
         return self
 
     def close(self):
-        if self.conn:
-            self.conn.close()
-            self.conn = None
+        with self._lock:
+            if self.conn:
+                self.conn.close()
+                self.conn = None
 
     def execute(self, sql, params=()):
         # 将 MySQL 风格的 %s 转为 SQLite 的 ?
@@ -111,18 +120,22 @@ class SQLiteDB(DBInterface):
         # 修复 excluded. 后的右括号（兼容反引号/双引号标识符，如 `value`）
         import re
         sql = re.sub(r'excluded\.([`"\w]+)\)', r'excluded.\1', sql)
-        return self.conn.execute(sql, params)
+        with self._lock:
+            return self.conn.execute(sql, params)
 
     def fetchone(self, sql, params=()):
-        row = self.execute(sql, params).fetchone()
-        return dict(row) if row else None
+        with self._lock:
+            row = self.execute(sql, params).fetchone()
+            return dict(row) if row else None
 
     def fetchall(self, sql, params=()):
-        rows = self.execute(sql, params).fetchall()
-        return [dict(r) for r in rows]
+        with self._lock:
+            rows = self.execute(sql, params).fetchall()
+            return [dict(r) for r in rows]
 
     def commit(self):
-        self.conn.commit()
+        with self._lock:
+            self.conn.commit()
 
     def init_tables(self):
         # v11.0: 所有业务表加入 user_id 列实现多用户数据隔离
@@ -132,8 +145,34 @@ class SQLiteDB(DBInterface):
                 username        TEXT NOT NULL UNIQUE,
                 password_hash   TEXT NOT NULL,
                 email           TEXT DEFAULT '',
+                nickname        TEXT DEFAULT '',
+                avatar          TEXT DEFAULT '',
                 role            TEXT DEFAULT 'user',
+                disabled        INTEGER NOT NULL DEFAULT 0,
+                is_guest        INTEGER NOT NULL DEFAULT 0,
+                expires_at      TEXT,
                 created_at      TEXT DEFAULT (datetime('now','localtime'))
+            )
+        """)
+        self.execute("""
+            CREATE TABLE IF NOT EXISTS email_codes (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                email       TEXT NOT NULL,
+                code        TEXT NOT NULL,
+                purpose     TEXT DEFAULT 'register',
+                expires_at  TEXT NOT NULL,
+                used        INTEGER NOT NULL DEFAULT 0,
+                created_at  TEXT DEFAULT (datetime('now','localtime'))
+            )
+        """)
+        self.execute("""
+            CREATE TABLE IF NOT EXISTS admin_actions (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                admin_id    INTEGER NOT NULL,
+                action      TEXT NOT NULL,
+                target      TEXT DEFAULT '',
+                detail      TEXT DEFAULT '',
+                created_at  TEXT DEFAULT (datetime('now','localtime'))
             )
         """)
         self.execute("""
@@ -316,14 +355,9 @@ class MySQLDB(DBInterface):
         try:
             import pymysql
         except ImportError:
-            print("[MySQL] pymysql 未安装，请执行: pip install pymysql")
-            print("[MySQL] 回退到 SQLite 模式")
-            db = SQLiteDB()
-            db.connect()
-            # 猴子补丁：把自身替换为 SQLite 实例
-            self.__class__ = SQLiteDB
-            self.__dict__ = db.__dict__
-            return self
+            raise RuntimeError(
+                "[DB] DP_DB_TYPE=mysql 但 pymysql 未安装，请执行: pip install pymysql"
+            ) from None
 
         self.conn = pymysql.connect(
             host=self.cfg["host"],
@@ -370,8 +404,36 @@ class MySQLDB(DBInterface):
                 username        VARCHAR(30) NOT NULL UNIQUE,
                 password_hash   TEXT NOT NULL,
                 email           VARCHAR(200) DEFAULT '',
+                nickname        VARCHAR(60) DEFAULT '',
+                avatar          VARCHAR(300) DEFAULT '',
                 role            VARCHAR(10) DEFAULT 'user',
+                disabled        TINYINT NOT NULL DEFAULT 0,
+                is_guest        TINYINT NOT NULL DEFAULT 0,
+                expires_at      DATETIME NULL,
                 created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """)
+        self.execute("""
+            CREATE TABLE IF NOT EXISTS email_codes (
+                id          INTEGER PRIMARY KEY AUTO_INCREMENT,
+                email       VARCHAR(200) NOT NULL,
+                code        VARCHAR(10) NOT NULL,
+                purpose     VARCHAR(20) DEFAULT 'register',
+                expires_at  DATETIME NOT NULL,
+                used        TINYINT NOT NULL DEFAULT 0,
+                created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_email_codes_email (email)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """)
+        self.execute("""
+            CREATE TABLE IF NOT EXISTS admin_actions (
+                id          INTEGER PRIMARY KEY AUTO_INCREMENT,
+                admin_id    INTEGER NOT NULL,
+                action      VARCHAR(30) NOT NULL,
+                target      VARCHAR(200) DEFAULT '',
+                detail      VARCHAR(500) DEFAULT '',
+                created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_admin_actions_time (id)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         """)
         self.execute("""
@@ -548,13 +610,9 @@ class PostgreSQLDB(DBInterface):
             import psycopg2
             import psycopg2.extras
         except ImportError:
-            print("[DB] psycopg2 未安装，请执行: pip install psycopg2-binary")
-            print("[DB] 回退到 SQLite 模式")
-            db = SQLiteDB()
-            db.connect()
-            self.__class__ = SQLiteDB
-            self.__dict__ = db.__dict__
-            return self
+            raise RuntimeError(
+                "[DB] DP_DB_TYPE=postgres 但 psycopg2 未安装，请执行: pip install psycopg2-binary"
+            ) from None
 
         self.conn = psycopg2.connect(
             host=self.cfg["host"],
@@ -665,8 +723,34 @@ class PostgreSQLDB(DBInterface):
                 username        VARCHAR(30) NOT NULL UNIQUE,
                 password_hash   TEXT NOT NULL,
                 email           VARCHAR(200) DEFAULT '',
+                nickname        VARCHAR(60) DEFAULT '',
+                avatar          VARCHAR(300) DEFAULT '',
                 role            VARCHAR(10) DEFAULT 'user',
+                disabled        SMALLINT NOT NULL DEFAULT 0,
+                is_guest        SMALLINT NOT NULL DEFAULT 0,
+                expires_at      TIMESTAMP NULL,
                 created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        self.execute("""
+            CREATE TABLE IF NOT EXISTS email_codes (
+                id          SERIAL PRIMARY KEY,
+                email       VARCHAR(200) NOT NULL,
+                code        VARCHAR(10) NOT NULL,
+                purpose     VARCHAR(20) DEFAULT 'register',
+                expires_at  TIMESTAMP NOT NULL,
+                used        SMALLINT NOT NULL DEFAULT 0,
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        self.execute("""
+            CREATE TABLE IF NOT EXISTS admin_actions (
+                id          SERIAL PRIMARY KEY,
+                admin_id    INTEGER NOT NULL,
+                action      VARCHAR(30) NOT NULL,
+                target      VARCHAR(200) DEFAULT '',
+                detail      VARCHAR(500) DEFAULT '',
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
         self.execute("""
@@ -850,7 +934,41 @@ def get_db() -> DBInterface:
 
     _db.connect()
     _db.init_tables()
+    _run_migrations(_db)
     return _db
+
+
+def _run_migrations(db: DBInterface):
+    """幂等增量迁移：为旧库补齐 v11/v12 新增的列。列已存在时静默跳过。"""
+    import logging
+    log = logging.getLogger(__name__)
+    alters = [
+        "ALTER TABLE users ADD COLUMN role VARCHAR(10) DEFAULT 'user'",
+        "ALTER TABLE users ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN nickname VARCHAR(60) DEFAULT ''",
+        "ALTER TABLE users ADD COLUMN avatar VARCHAR(300) DEFAULT ''",
+        "ALTER TABLE users ADD COLUMN is_guest INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN expires_at VARCHAR(30)",
+    ]
+    for tbl in ["plans", "progress", "routine_done", "earned", "state",
+                "archives", "day_data", "moods", "ledger",
+                "ai_chat_history", "ai_requests"]:
+        alters.append(f"ALTER TABLE {tbl} ADD COLUMN user_id INTEGER NOT NULL DEFAULT 1")
+
+    for sql in alters:
+        try:
+            db.execute(sql)
+            db.commit()
+            log.info("[migrate] OK %s", sql)
+        except Exception as e:
+            # 列/表已存在 → 跳过；PG/MySQL 失败事务需回滚后才能继续
+            conn = getattr(db, "conn", None)
+            if conn is not None:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            log.debug("[migrate] skip %s (%s)", sql, str(e).split("\n")[0][:80])
 
 
 def reset_db():
@@ -1419,11 +1537,203 @@ def get_chat_history(user_id: int, date: str) -> dict | None:
 
 # ── 用户信息 ──
 
+_USER_COLS = "id, username, email, nickname, avatar, role, disabled, is_guest, expires_at, created_at"
+
+
 def get_user_by_id(user_id: int) -> dict | None:
     """根据 ID 获取用户信息"""
     db = get_db()
     row = db.fetchone(
-        "SELECT id, username, email, role, created_at FROM users WHERE id = %s",
+        f"SELECT {_USER_COLS} FROM users WHERE id = %s",
         (user_id,),
     )
     return dict(row) if row else None
+
+
+def get_user_by_email(email: str) -> dict | None:
+    """根据邮箱获取用户（空邮箱不参与匹配——游客无邮箱）"""
+    if not email:
+        return None
+    db = get_db()
+    row = db.fetchone(
+        f"SELECT {_USER_COLS} FROM users WHERE email = %s AND email != ''",
+        (email,),
+    )
+    return dict(row) if row else None
+
+
+def update_user_profile(user_id: int, nickname: str | None = None, avatar: str | None = None):
+    """更新昵称/头像（None 的字段不动）"""
+    db = get_db()
+    if nickname is not None:
+        db.execute("UPDATE users SET nickname = %s WHERE id = %s", (nickname, user_id))
+    if avatar is not None:
+        db.execute("UPDATE users SET avatar = %s WHERE id = %s", (avatar, user_id))
+    db.commit()
+
+
+def cleanup_expired_guests() -> int:
+    """删除已过期的游客账号及其全部数据，返回清理数量"""
+    db = get_db()
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    rows = db.fetchall(
+        "SELECT id FROM users WHERE is_guest = 1 AND expires_at IS NOT NULL AND expires_at < %s",
+        (now,),
+    )
+    for r in rows:
+        delete_user(r["id"])
+    return len(rows)
+
+
+# ── 邮箱验证码（v12.1） ──
+
+def _parse_dt(v) -> datetime | None:
+    """兼容 sqlite 字符串与 mysql/pg datetime 对象"""
+    if v is None:
+        return None
+    if isinstance(v, datetime):
+        return v
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            return datetime.strptime(str(v)[:19], fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def create_email_code(email: str, ttl_minutes: int = 10, cooldown_sec: int = 60) -> tuple[str | None, str | None]:
+    """为邮箱生成 6 位验证码。成功返回 (code, None)；冷却期内返回 (None, 错误消息)。"""
+    db = get_db()
+    row = db.fetchone(
+        "SELECT created_at FROM email_codes WHERE email = %s ORDER BY id DESC LIMIT 1",
+        (email,),
+    )
+    last = _parse_dt(row["created_at"]) if row else None
+    if last and (datetime.now() - last).total_seconds() < cooldown_sec:
+        return None, "发送太频繁，请 60 秒后再试"
+    # 作废旧码
+    db.execute("UPDATE email_codes SET used = 1 WHERE email = %s", (email,))
+    code = "".join(secrets.choice(string.digits) for _ in range(6))
+    expires = (datetime.now() + timedelta(minutes=ttl_minutes)).strftime("%Y-%m-%d %H:%M:%S")
+    db.execute(
+        "INSERT INTO email_codes (email, code, expires_at) VALUES (%s, %s, %s)",
+        (email, code, expires),
+    )
+    db.commit()
+    return code, None
+
+
+def verify_email_code(email: str, code: str) -> bool:
+    """校验并消费验证码（未使用、未过期、最新一条）"""
+    db = get_db()
+    row = db.fetchone(
+        "SELECT id, expires_at FROM email_codes "
+        "WHERE email = %s AND code = %s AND used = 0 ORDER BY id DESC LIMIT 1",
+        (email, code),
+    )
+    if not row:
+        return False
+    exp = _parse_dt(row["expires_at"])
+    if exp and datetime.now() > exp:
+        return False
+    db.execute("UPDATE email_codes SET used = 1 WHERE id = %s", (row["id"],))
+    db.commit()
+    return True
+
+
+# ── 管理员：用户管理（v12.0） ──
+
+def list_users() -> list[dict]:
+    """列出全部用户（管理员后台用）"""
+    db = get_db()
+    rows = db.fetchall(
+        "SELECT id, username, email, nickname, avatar, role, disabled, is_guest, expires_at, created_at "
+        "FROM users ORDER BY id ASC"
+    )
+    return [dict(r) for r in rows]
+
+
+def set_user_disabled(user_id: int, disabled: bool) -> bool:
+    db = get_db()
+    cur = db.execute(
+        "UPDATE users SET disabled = %s WHERE id = %s",
+        (1 if disabled else 0, user_id),
+    )
+    db.commit()
+    return cur.rowcount > 0
+
+
+def admin_reset_password(user_id: int, password_hash: str) -> bool:
+    db = get_db()
+    cur = db.execute(
+        "UPDATE users SET password_hash = %s WHERE id = %s",
+        (password_hash, user_id),
+    )
+    db.commit()
+    return cur.rowcount > 0
+
+
+def count_active_admins(exclude_user_id: int | None = None) -> int:
+    """统计启用状态的管理员数量（用于防止最后一个 admin 被禁用/删除）"""
+    db = get_db()
+    if exclude_user_id is None:
+        row = db.fetchone(
+            "SELECT COUNT(*) AS cnt FROM users WHERE role = 'admin' AND disabled = 0"
+        )
+    else:
+        row = db.fetchone(
+            "SELECT COUNT(*) AS cnt FROM users WHERE role = 'admin' AND disabled = 0 AND id != %s",
+            (exclude_user_id,),
+        )
+    return row["cnt"] if row else 0
+
+
+def delete_user(user_id: int):
+    """删除用户并级联清理其全部业务数据"""
+    db = get_db()
+    for tbl in ["plans", "progress", "routine_done", "earned", "state",
+                "archives", "day_data", "moods", "ledger",
+                "ai_chat_history", "ai_requests"]:
+        db.execute(f"DELETE FROM {tbl} WHERE user_id = %s", (user_id,))
+    db.execute(
+        "DELETE FROM invite_codes WHERE created_by = %s OR used_by = %s",
+        (user_id, user_id),
+    )
+    db.execute("DELETE FROM users WHERE id = %s", (user_id,))
+    db.commit()
+
+
+def revoke_invite_code(code: str, admin_id: int) -> bool:
+    """作废未使用的邀请码（仅限本人创建的）"""
+    db = get_db()
+    cur = db.execute(
+        "DELETE FROM invite_codes WHERE code = %s AND created_by = %s AND used_by IS NULL",
+        (code, admin_id),
+    )
+    db.commit()
+    return cur.rowcount > 0
+
+
+# ── 管理操作审计（v12.2） ──
+
+def log_admin_action(admin_id: int, action: str, target: str = "", detail: str = ""):
+    """记录一条管理操作审计日志"""
+    db = get_db()
+    db.execute(
+        "INSERT INTO admin_actions (admin_id, action, target, detail) VALUES (%s, %s, %s, %s)",
+        (admin_id, action, target[:200], detail[:500]),
+    )
+    db.commit()
+
+
+def list_admin_actions(limit: int = 100) -> list[dict]:
+    """最近的审计日志（含操作者用户名）"""
+    db = get_db()
+    rows = db.fetchall(
+        "SELECT a.id, a.admin_id, u.username AS admin_name, u.nickname AS admin_nickname, "
+        "a.action, a.target, a.detail, a.created_at "
+        "FROM admin_actions a LEFT JOIN users u ON u.id = a.admin_id "
+        "ORDER BY a.id DESC LIMIT %s",
+        (limit,),
+    )
+    return [dict(r) for r in rows]

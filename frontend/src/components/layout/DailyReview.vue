@@ -83,6 +83,14 @@ function handleExportPDF() {
   }
   window.print()
 }
+
+async function handleDelete() {
+  if (!window.confirm('确定删除 ' + scheduleStore.currentDate + ' 的复盘吗？此操作不可恢复。')) return
+  await archiveStore.deleteReview(scheduleStore.currentDate)
+  feedback.value = ''
+  rating.value = 0
+  toastStore.ok('复盘已删除，可以重新填写')
+}
 </script>
 
 <template>
@@ -149,6 +157,7 @@ function handleExportPDF() {
 
         <!-- Export buttons -->
         <div class="rp-export-actions">
+          <button class="btn-sm btn-danger-text" @click="handleDelete">🗑 删除复盘</button>
           <button class="btn-sm" @click="handleExportMD">📥 导出 MD</button>
           <button class="btn-sm" @click="handleExportPDF">🖨️ 导出 PDF</button>
         </div>
@@ -452,5 +461,15 @@ function handleExportPDF() {
 .btn-sm:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+.btn-danger-text {
+  color: var(--danger);
+  margin-right: auto;
+}
+
+.btn-danger-text:hover {
+  border-color: var(--danger);
+  color: var(--danger);
 }
 </style>

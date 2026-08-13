@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import api from '@/api/client'
+import api, { unwrap } from '@/api/client'
 
 export const useGoalStore = defineStore('goals', {
   state: () => ({
@@ -32,7 +32,8 @@ export const useGoalStore = defineStore('goals', {
       this.loading = true
       try {
         const { data } = await api.get('/goals')
-        if (Array.isArray(data)) this.bigGoals = data
+        const list = unwrap(data)
+        if (Array.isArray(list)) this.bigGoals = list
         this.loading = false
       } catch {
         // LS fallback
@@ -85,7 +86,8 @@ export const useGoalStore = defineStore('goals', {
     async _persist() {
       try {
         localStorage.setItem('dp_bigGoals', JSON.stringify(this.bigGoals))
-        await api.put('/goals', this.bigGoals)
+        // 后端读取 body.get("goals")
+        await api.put('/goals', { goals: this.bigGoals })
       } catch { /* silent */ }
     },
 
