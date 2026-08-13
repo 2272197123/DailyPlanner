@@ -591,6 +591,33 @@ onUnmounted(() => {
   text-align: center;
 }
 
+/* ── 移动端 ── */
+@media (max-width: 768px) {
+  .utl {
+    padding-bottom: var(--space-8);
+  }
+
+  /* 模板管理添加行：名称独占一行，其余换行排列 */
+  .mgr-add {
+    flex-wrap: wrap;
+  }
+
+  .mgr-name-input {
+    flex: 1 1 100%;
+    order: -1;
+  }
+
+  .mgr-icon-input {
+    flex: 1;
+    width: auto;
+  }
+
+  .mgr-time-input {
+    flex: 2;
+    width: auto;
+  }
+}
+
 /* ── 空状态 ── */
 .utl-empty {
   text-align: center;
@@ -638,7 +665,7 @@ onUnmounted(() => {
   letter-spacing: 0.15em;
   color: var(--danger);
   background: var(--danger-bg);
-  box-shadow: 0 8px 32px rgba(238, 85, 85, 0.18);
+  box-shadow: 0 8px 32px var(--danger-bg);
   writing-mode: vertical-rl;
   opacity: 0;
 }

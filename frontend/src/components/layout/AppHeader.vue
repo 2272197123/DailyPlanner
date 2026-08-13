@@ -44,13 +44,13 @@ const displayDate = computed(() => fmtDate(scheduleStore.currentDate))
   align-items: center;
   justify-content: space-between;
   padding: var(--space-3) var(--space-6);
-  background: var(--bg-elevated);
+  background: var(--glass-bg);
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
   z-index: var(--z-sticky);
   backdrop-filter: blur(12px);
-  background: rgba(255, 255, 255, 0.85);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .header-left {
@@ -106,7 +106,7 @@ const displayDate = computed(() => fmtDate(scheduleStore.currentDate))
 }
 
 .balance-display:hover {
-  background: rgba(30, 32, 48, 0.1);
+  background: var(--bg-muted);
 }
 
 .balance-level {

@@ -512,7 +512,7 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   padding: var(--space-6);
-  background: rgba(30, 32, 48, 0.32);
+  background: rgba(0, 0, 0, 0.35);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
 }

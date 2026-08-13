@@ -178,4 +178,17 @@ const CIRC = 2 * Math.PI * 44 // r=44
   color: var(--text-secondary);
   line-height: 1.6;
 }
+
+/* ── 移动端 ── */
+@media (max-width: 768px) {
+  .day-hero {
+    gap: var(--space-4);
+    padding: var(--space-4);
+  }
+
+  .dh-ring {
+    width: 72px;
+    height: 72px;
+  }
+}
 </style>

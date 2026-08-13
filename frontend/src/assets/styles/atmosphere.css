@@ -10,22 +10,22 @@
   pointer-events: none;
   z-index: 0;
   filter: blur(120px);
-  opacity: 0.25;
+  opacity: var(--orb-opacity, 0.25);
   transition: opacity var(--transition-slow, 0.3s ease);
 }
 .orb-1 {
   width: 600px; height: 600px;
-  background: radial-gradient(circle, rgba(106, 90, 205, 0.5) 0%, transparent 70%);
+  background: radial-gradient(circle, var(--orb-1, rgba(106, 90, 205, 0.5)) 0%, transparent 70%);
   top: -200px; right: -150px;
 }
 .orb-2 {
   width: 500px; height: 500px;
-  background: radial-gradient(circle, rgba(45, 122, 82, 0.4) 0%, transparent 70%);
+  background: radial-gradient(circle, var(--orb-2, rgba(45, 122, 82, 0.4)) 0%, transparent 70%);
   bottom: -150px; left: -120px;
 }
 .orb-3 {
   width: 350px; height: 350px;
-  background: radial-gradient(circle, rgba(194, 59, 42, 0.3) 0%, transparent 70%);
+  background: radial-gradient(circle, var(--orb-3, rgba(194, 59, 42, 0.3)) 0%, transparent 70%);
   top: 40%; left: 50%;
   transform: translate(-50%, -50%);
 }
@@ -81,10 +81,10 @@ body::after {
 }
 
 /* ── Dark mode adjustments ── */
-[data-theme="dark"] .paper-texture {
+:root[data-mode="dark"] .paper-texture {
   opacity: 0.012;
 }
-[data-theme="dark"] body::after {
+:root[data-mode="dark"] body::after {
   background:
     radial-gradient(ellipse at 50% 0%, rgba(200, 196, 224, 0.04) 0%, transparent 60%),
     radial-gradient(ellipse at 80% 100%, rgba(200, 196, 224, 0.03) 0%, transparent 50%);

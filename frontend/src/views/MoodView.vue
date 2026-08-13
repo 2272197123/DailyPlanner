@@ -66,6 +66,13 @@ const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 +
 <style scoped>
 .mood-view {
   max-width: 1100px;
+  margin: 0 auto;
+}
+
+@media (min-width: 1440px) {
+  .mood-view {
+    max-width: 1240px;
+  }
 }
 
 .page-header {

@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useMoodStore, MOOD_PRESETS } from '@/stores/mood'
 import { useAuthStore } from '@/stores/auth'
 import { useCurrencyStore } from '@/stores/currency'
+import { useThemeStore } from '@/stores/theme'
 import { useAnime } from '@/composables/useAnime'
 import { toLocalDate } from '@/utils/format'
 
@@ -12,9 +13,11 @@ const router = useRouter()
 const moodStore = useMoodStore()
 const auth = useAuthStore()
 const currencyStore = useCurrencyStore()
+const themeStore = useThemeStore()
 const { burst, runPreset } = useAnime()
 
 const collapsed = ref(false)
+const mobileOpen = ref(false)
 const ventText = ref('')
 
 const navItems = computed(() => {
@@ -126,20 +129,37 @@ onMounted(() => {
 })
 
 watch(() => route.name, () => {
+  mobileOpen.value = false
   runPreset('.sidebar-nav-item', 'staggerFadeUp')
 })
 </script>
 
 <template>
-  <aside class="app-sidebar" :class="{ collapsed }">
+  <!-- 移动端：汉堡按钮 + 遮罩（仅 ≤768px 显示） -->
+  <button
+    class="mobile-menu-btn"
+    :class="{ hidden: mobileOpen }"
+    aria-label="打开菜单"
+    @click="mobileOpen = true"
+  >☰</button>
+  <div v-if="mobileOpen" class="sidebar-backdrop" @click="mobileOpen = false"></div>
+
+  <aside class="app-sidebar" :class="{ collapsed, open: mobileOpen }">
     <div class="sidebar-header">
       <div class="brand">
         <span class="brand-mark">∿</span>
         <span v-if="!collapsed" class="brand-name">DailyPlan</span>
       </div>
-      <button class="collapse-btn" @click="collapsed = !collapsed" title="折叠/展开">
-        {{ collapsed ? '»' : '«' }}
-      </button>
+      <div class="header-actions">
+        <button
+          class="collapse-btn"
+          :title="themeStore.isDark ? '切换到白天模式' : '切换到夜间模式'"
+          @click="themeStore.toggleMode()"
+        >{{ themeStore.isDark ? '☀' : '☾' }}</button>
+        <button class="collapse-btn" @click="collapsed = !collapsed" title="折叠/展开">
+          {{ collapsed ? '»' : '«' }}
+        </button>
+      </div>
     </div>
 
     <nav class="sidebar-nav">
@@ -243,6 +263,12 @@ watch(() => route.name, () => {
   margin-bottom: var(--space-6);
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -309,8 +335,8 @@ watch(() => route.name, () => {
 
 .sidebar-nav-item.active {
   background: var(--accent);
-  color: var(--text-inverse);
-  box-shadow: 0 2px 8px rgba(30, 32, 48, 0.18);
+  color: var(--on-accent, #fff);
+  box-shadow: var(--shadow-sm);
 }
 
 .nav-icon {
@@ -523,13 +549,61 @@ watch(() => route.name, () => {
   color: var(--text-muted);
 }
 
+/* ── 移动端抽屉导航 ── */
+.mobile-menu-btn {
+  display: none;
+}
+
+.sidebar-backdrop {
+  display: none;
+}
+
 @media (max-width: 768px) {
   .app-sidebar {
     transform: translateX(-100%);
     transition: transform var(--duration-normal) var(--ease-out);
+    width: 280px;
+    box-shadow: var(--shadow-lg);
   }
   .app-sidebar.open {
     transform: translateX(0);
+  }
+  /* 移动端忽略折叠态，始终完整宽度 */
+  .app-sidebar.collapsed {
+    width: 280px;
+    padding: var(--space-5);
+  }
+
+  .mobile-menu-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    top: var(--space-3);
+    left: var(--space-3);
+    z-index: var(--z-sticky);
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-md);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: var(--shadow-md);
+    color: var(--text-primary);
+    font-size: 1.1rem;
+  }
+  .mobile-menu-btn.hidden {
+    display: none;
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--z-sticky) - 1);
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(2px);
   }
 }
 </style>

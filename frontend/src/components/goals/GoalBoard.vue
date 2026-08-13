@@ -400,7 +400,7 @@ onMounted(() => goalStore.fetchGoals())
   transition: all var(--duration-fast) var(--ease-out);
 }
 
-.gcp-check.checked { background: var(--success); border-color: var(--success); color: white; }
+.gcp-check.checked { background: var(--success); border-color: var(--success); color: var(--on-accent); }
 
 .gcp-info { flex: 1; display: flex; flex-direction: column; }
 .gcp-name { font-size: var(--text-sm); color: var(--text-primary); }
@@ -425,7 +425,7 @@ onMounted(() => goalStore.fetchGoals())
   transition: all var(--duration-fast);
 }
 
-.gc-ms-check.checked { background: var(--success); border-color: var(--success); color: white; }
+.gc-ms-check.checked { background: var(--success); border-color: var(--success); color: var(--on-accent); }
 .gc-ms-text { font-size: var(--text-xs); color: var(--text-primary); }
 .gc-ms.done .gc-ms-text { text-decoration: line-through; color: var(--text-muted); }
 
@@ -471,4 +471,9 @@ onMounted(() => goalStore.fetchGoals())
 .goal-empty-icon { font-size: 2.5rem; display: block; margin-bottom: var(--space-3); }
 .goal-empty p { margin-bottom: var(--space-2); }
 .goal-empty-hint { font-size: var(--text-sm); color: var(--text-muted); }
+
+@media (max-width: 768px) {
+  .gc-row { flex-direction: column; }
+  .gc-input.sm { width: 100%; }
+}
 </style>

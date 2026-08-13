@@ -30,6 +30,14 @@ services:
       - DP_SECRET_KEY=${DP_SECRET_KEY:?请在 .env 中设置 DP_SECRET_KEY（≥32 位随机串）}
       # 注册模式
       - DP_REGISTRATION_MODE=${DP_REGISTRATION_MODE:-invite_only}
+      # 游客模式
+      - DP_GUEST_ENABLED=${DP_GUEST_ENABLED:-true}
+      # SMTP 邮件（注册验证码；不配置则注册无法发码）
+      - DP_SMTP_HOST=${DP_SMTP_HOST:-}
+      - DP_SMTP_PORT=${DP_SMTP_PORT:-465}
+      - DP_SMTP_USERNAME=${DP_SMTP_USERNAME:-}
+      - DP_SMTP_PASSWORD=${DP_SMTP_PASSWORD:-}
+      - DP_SMTP_FROM=${DP_SMTP_FROM:-}
       # AI（可选）
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}

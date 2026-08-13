@@ -154,6 +154,7 @@ function addCustomPreset() {
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: var(--space-3);
   background: rgba(0, 0, 0, 0.25);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);

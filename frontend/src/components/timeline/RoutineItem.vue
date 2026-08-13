@@ -141,4 +141,17 @@ function handleToggle(event) {
   opacity: 1;
   transform: scale(1);
 }
+
+/* ── 移动端 ── */
+@media (max-width: 768px) {
+  .routine-item {
+    gap: var(--space-2);
+    padding: var(--space-3);
+  }
+
+  /* 时间已由左侧时间轨显示，小屏隐藏避免挤压 */
+  .ri-time {
+    display: none;
+  }
+}
 </style>

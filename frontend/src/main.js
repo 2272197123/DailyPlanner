@@ -5,6 +5,7 @@ import router from './router'
 
 /* Global styles — order matters: variables → base → atmosphere → animations → components */
 import '@/assets/styles/variables.css'
+import '@/assets/styles/themes.css'
 import '@/assets/styles/base.css'
 import '@/assets/styles/atmosphere.css'
 import '@/assets/styles/animations.css'

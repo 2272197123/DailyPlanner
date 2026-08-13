@@ -26,13 +26,13 @@
 
 .btn-primary {
   background: var(--accent);
-  color: var(--text-inverse);
-  box-shadow: 0 2px 8px rgba(30, 32, 48, 0.18);
+  color: var(--on-accent, #fff);
+  box-shadow: var(--shadow-sm);
 }
 
 .btn-primary:hover {
   background: var(--accent-light);
-  box-shadow: 0 4px 12px rgba(30, 32, 48, 0.22);
+  box-shadow: var(--shadow-md);
 }
 
 .btn-secondary {
@@ -103,7 +103,7 @@
 .input:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(30, 32, 48, 0.08);
+  box-shadow: 0 0 0 3px var(--accent-muted);
 }
 
 .input::placeholder {
@@ -150,11 +150,14 @@
   padding: var(--space-5);
   box-shadow: var(--shadow-sm);
   transition: transform var(--duration-fast) var(--ease-out),
-              box-shadow var(--duration-fast) var(--ease-out);
+              box-shadow var(--duration-fast) var(--ease-out),
+              border-color var(--duration-fast) var(--ease-out);
 }
 
 .card:hover {
   box-shadow: var(--shadow-md);
+  border-color: var(--border-strong, var(--border));
+  transform: translateY(-1px);
 }
 
 .card-glass {

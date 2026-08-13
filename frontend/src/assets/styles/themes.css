@@ -1,0 +1,135 @@
+/* ═══════════════════════════════════════
+   themes.css — 主题预设（与 constants.js THEME_PRESETS 对应）
+   每个主题覆盖：accent 阶梯 / 页面底色 / 光晕 / 当下态色
+   并通过 [data-mode="dark"][data-theme="x"] 提供暗色变体。
+   主题切换只改 documentElement 的 data-theme 属性，无内联变量。
+   ═══════════════════════════════════════ */
+
+/* ── 暗色模式下的默认墨色 accent（无主题时） ── */
+:root[data-mode="dark"] {
+  --accent: #b9b7c9;
+  --accent-light: #cdcbe0;
+  --accent-lighter: #e0deee;
+  --accent-muted: rgba(185, 183, 201, 0.14);
+  --on-accent: #17181f;
+}
+
+/* ── 樱 sakura ── */
+:root[data-theme="sakura"] {
+  --accent: #c4647a; --accent-light: #d18197; --accent-lighter: #e0a3b4;
+  --accent-muted: rgba(196, 100, 122, 0.1);
+  --bg: #fdf6f8; --bg-muted: #f8eaee;
+  --state-present: var(--accent); --state-present-bg: rgba(196, 100, 122, 0.05);
+  --orb-1: rgba(214, 130, 152, 0.55); --orb-2: rgba(196, 100, 122, 0.4); --orb-3: rgba(240, 180, 197, 0.4);
+}
+:root[data-mode="dark"][data-theme="sakura"] {
+  --accent: #d98a9f; --accent-light: #e5a7b8; --accent-lighter: #efc3cf;
+  --accent-muted: rgba(217, 138, 159, 0.16);
+  --bg: #1a1216; --bg-muted: #2c2027;
+  --state-present: var(--accent); --state-present-bg: rgba(217, 138, 159, 0.08);
+}
+
+/* ── 林 forest ── */
+:root[data-theme="forest"] {
+  --accent: #4a7c5a; --accent-light: #639674; --accent-lighter: #82ad90;
+  --accent-muted: rgba(74, 124, 90, 0.1);
+  --bg: #f5f9f6; --bg-muted: #e8f1ea;
+  --state-present: var(--accent); --state-present-bg: rgba(74, 124, 90, 0.05);
+  --orb-1: rgba(106, 158, 122, 0.5); --orb-2: rgba(74, 124, 90, 0.45); --orb-3: rgba(163, 196, 172, 0.35);
+}
+:root[data-mode="dark"][data-theme="forest"] {
+  --accent: #6fa581; --accent-light: #8ab89a; --accent-lighter: #a5cbb2;
+  --accent-muted: rgba(111, 165, 129, 0.16);
+  --bg: #121915; --bg-muted: #1f2c24;
+  --state-present: var(--accent); --state-present-bg: rgba(111, 165, 129, 0.08);
+}
+
+/* ── 海 ocean ── */
+:root[data-theme="ocean"] {
+  --accent: #3b6e8e; --accent-light: #5787a5; --accent-lighter: #79a2ba;
+  --accent-muted: rgba(59, 110, 142, 0.1);
+  --bg: #f4f8fb; --bg-muted: #e6eff5;
+  --state-present: var(--accent); --state-present-bg: rgba(59, 110, 142, 0.05);
+  --orb-1: rgba(91, 143, 173, 0.5); --orb-2: rgba(59, 110, 142, 0.45); --orb-3: rgba(143, 184, 208, 0.35);
+}
+:root[data-mode="dark"][data-theme="ocean"] {
+  --accent: #6b9dbd; --accent-light: #88b1cc; --accent-lighter: #a6c5da;
+  --accent-muted: rgba(107, 157, 189, 0.16);
+  --bg: #111820; --bg-muted: #1c2833;
+  --state-present: var(--accent); --state-present-bg: rgba(107, 157, 189, 0.08);
+}
+
+/* ── 晖 sunset ── */
+:root[data-theme="sunset"] {
+  --accent: #c47a4a; --accent-light: #d19367; --accent-lighter: #ddad88;
+  --accent-muted: rgba(196, 122, 74, 0.1);
+  --bg: #fdf8f3; --bg-muted: #f9ede3;
+  --state-present: var(--accent); --state-present-bg: rgba(196, 122, 74, 0.05);
+  --orb-1: rgba(214, 152, 106, 0.5); --orb-2: rgba(196, 122, 74, 0.42); --orb-3: rgba(233, 190, 150, 0.38);
+}
+:root[data-mode="dark"][data-theme="sunset"] {
+  --accent: #d99a6d; --accent-light: #e2af89; --accent-lighter: #ecc4a6;
+  --accent-muted: rgba(217, 154, 109, 0.16);
+  --bg: #1c1512; --bg-muted: #2e221b;
+  --state-present: var(--accent); --state-present-bg: rgba(217, 154, 109, 0.08);
+}
+
+/* ── 墨 noir ── */
+:root[data-theme="noir"] {
+  --accent: #4d4d4d; --accent-light: #6b6b6b; --accent-lighter: #8a8a8a;
+  --accent-muted: rgba(77, 77, 77, 0.1);
+  --bg: #f6f6f5; --bg-muted: #eaeae8;
+  --state-present: var(--accent); --state-present-bg: rgba(77, 77, 77, 0.05);
+  --orb-1: rgba(120, 120, 120, 0.35); --orb-2: rgba(90, 90, 90, 0.3); --orb-3: rgba(160, 160, 160, 0.3);
+}
+:root[data-mode="dark"][data-theme="noir"] {
+  --accent: #a8a8a8; --accent-light: #bcbcbc; --accent-lighter: #d0d0d0;
+  --accent-muted: rgba(168, 168, 168, 0.16);
+  --bg: #131313; --bg-muted: #242424;
+  --state-present: var(--accent); --state-present-bg: rgba(168, 168, 168, 0.08);
+}
+
+/* ── 幻 vapor ── */
+:root[data-theme="vapor"] {
+  --accent: #7b5ea7; --accent-light: #9278b8; --accent-lighter: #ab95c9;
+  --accent-muted: rgba(123, 94, 167, 0.11);
+  --bg: #f9f6fc; --bg-muted: #f0e9f7;
+  --state-present: var(--accent); --state-present-bg: rgba(123, 94, 167, 0.05);
+  --orb-1: rgba(153, 122, 190, 0.55); --orb-2: rgba(123, 94, 167, 0.45); --orb-3: rgba(190, 163, 218, 0.4);
+}
+:root[data-mode="dark"][data-theme="vapor"] {
+  --accent: #a185c9; --accent-light: #b49fd5; --accent-lighter: #c7b9e1;
+  --accent-muted: rgba(161, 133, 201, 0.18);
+  --bg: #161221; --bg-muted: #241d33;
+  --state-present: var(--accent); --state-present-bg: rgba(161, 133, 201, 0.09);
+}
+
+/* ── 极 aurora ── */
+:root[data-theme="aurora"] {
+  --accent: #3a8a7a; --accent-light: #55a08f; --accent-lighter: #76b5a6;
+  --accent-muted: rgba(58, 138, 122, 0.1);
+  --bg: #f4faf8; --bg-muted: #e5f3ee;
+  --state-present: var(--accent); --state-present-bg: rgba(58, 138, 122, 0.05);
+  --orb-1: rgba(88, 165, 148, 0.5); --orb-2: rgba(58, 138, 122, 0.45); --orb-3: rgba(140, 196, 182, 0.38);
+}
+:root[data-mode="dark"][data-theme="aurora"] {
+  --accent: #63ab9b; --accent-light: #80bcae; --accent-lighter: #9dcdc1;
+  --accent-muted: rgba(99, 171, 155, 0.16);
+  --bg: #101b19; --bg-muted: #1b2e2a;
+  --state-present: var(--accent); --state-present-bg: rgba(99, 171, 155, 0.08);
+}
+
+/* ── 烬 ember ── */
+:root[data-theme="ember"] {
+  --accent: #b84a3c; --accent-light: #c86759; --accent-lighter: #d4867a;
+  --accent-muted: rgba(184, 74, 60, 0.1);
+  --bg: #fdf6f4; --bg-muted: #f9e9e5;
+  --state-present: var(--accent); --state-present-bg: rgba(184, 74, 60, 0.05);
+  --orb-1: rgba(203, 106, 90, 0.5); --orb-2: rgba(184, 74, 60, 0.42); --orb-3: rgba(228, 154, 138, 0.38);
+}
+:root[data-mode="dark"][data-theme="ember"] {
+  --accent: #d47568; --accent-light: #dd9084; --accent-lighter: #e7aca2;
+  --accent-muted: rgba(212, 117, 104, 0.16);
+  --bg: #1d1312; --bg-muted: #302019;
+  --state-present: var(--accent); --state-present-bg: rgba(212, 117, 104, 0.08);
+}

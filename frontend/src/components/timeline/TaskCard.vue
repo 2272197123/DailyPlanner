@@ -328,6 +328,7 @@ function handleDelete() {
 
 .card-title {
   flex: 1;
+  min-width: 0;
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--text-primary);
@@ -441,7 +442,7 @@ function handleDelete() {
 .cst-check.checked {
   background: var(--success);
   border-color: var(--success);
-  color: white;
+  color: var(--on-accent, #fff);
 }
 
 .cst-text {
@@ -648,4 +649,31 @@ function handleDelete() {
 .ctimer-btn.pause:hover { background: var(--warning-bg); }
 .ctimer-btn.reset { color: var(--text-muted); font-size: var(--text-xs); }
 .ctimer-btn.reset:hover { background: var(--bg-muted); color: var(--danger); }
+
+/* ── 移动端 ── */
+@media (max-width: 768px) {
+  /* 头部一行放不下时允许换行，按钮组靠右 */
+  .card-header {
+    flex-wrap: wrap;
+  }
+
+  .card-actions {
+    margin-left: auto;
+  }
+
+  /* 计时器：进度条独占一行，时间与按钮一行 */
+  .card-timer {
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  .ctimer-bar {
+    flex: 1 1 100%;
+    order: -1;
+  }
+
+  .edit-panel {
+    padding: var(--space-5);
+  }
+}
 </style>

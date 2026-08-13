@@ -26,6 +26,13 @@ onMounted(() => {
 <style scoped>
 .ledger-view {
   max-width: 860px;
+  margin: 0 auto;
+}
+
+@media (min-width: 1440px) {
+  .ledger-view {
+    max-width: 1000px;
+  }
 }
 
 .page-header {

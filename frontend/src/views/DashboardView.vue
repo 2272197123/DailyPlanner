@@ -142,6 +142,13 @@ onMounted(() => {
 <style scoped>
 .dashboard-view {
   max-width: 960px;
+  margin: 0 auto;
+}
+
+@media (min-width: 1440px) {
+  .dashboard-view {
+    max-width: 1160px;
+  }
 }
 
 .dash-header {

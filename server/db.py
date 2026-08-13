@@ -1059,9 +1059,9 @@ def list_invite_codes(user_id: int) -> list[dict]:
 
 
 def count_users() -> int:
-    """返回总用户数"""
+    """返回正式用户数（不含游客，游客不应影响首个注册用户成为管理员）"""
     db = get_db()
-    row = db.fetchone("SELECT COUNT(*) as cnt FROM users")
+    row = db.fetchone("SELECT COUNT(*) as cnt FROM users WHERE is_guest = 0")
     return row["cnt"] if row else 0
 
 

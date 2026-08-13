@@ -10,6 +10,7 @@
   --accent-light: #2a2d42;
   --accent-lighter: #3a3d55;
   --accent-muted: rgba(30, 32, 48, 0.06);
+  --on-accent: #ffffff;
 
   /* ── Time tri-state ── */
   --state-past: #d4a76a;
@@ -63,10 +64,17 @@
 
   /* ── Border & shadow ── */
   --border: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.14);
   --border-focus: var(--accent);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.08);
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.07);
+  --shadow-md: 0 2px 4px rgba(15, 23, 42, 0.05), 0 10px 24px -8px rgba(15, 23, 42, 0.14);
+  --shadow-lg: 0 4px 8px rgba(15, 23, 42, 0.06), 0 20px 40px -12px rgba(15, 23, 42, 0.2);
+
+  /* ── Ambient orbs (per-theme overridable) ── */
+  --orb-1: rgba(106, 90, 205, 0.5);
+  --orb-2: rgba(45, 122, 82, 0.4);
+  --orb-3: rgba(194, 59, 42, 0.3);
+  --orb-opacity: 0.25;
 
   /* ── Typography ── */
   --font-heading: 'Noto Serif SC', 'Source Han Serif SC', serif;
@@ -114,4 +122,57 @@
   --z-modal: 400;
   --z-toast: 500;
   --z-tooltip: 600;
+}
+
+/* ═══════════════════════════════════════
+   Dark mode — full token override
+   Toggled via data-mode="dark" on <html>.
+   Combined with any data-theme (themes.css provides
+   per-theme dark accents on top of these).
+   ═══════════════════════════════════════ */
+:root[data-mode="dark"] {
+  /* ── Time tri-state (dark-adjusted) ── */
+  --state-past: #d8b285;
+  --state-past-bg: rgba(216, 178, 133, 0.14);
+  --state-present: #e8e6f0;
+  --state-present-bg: rgba(232, 230, 240, 0.07);
+  --state-future: #a794d0;
+  --state-future-bg: rgba(167, 148, 208, 0.12);
+
+  /* ── Functional colors (brightened for dark bg) ── */
+  --success: #5cc9a7;
+  --success-bg: rgba(92, 201, 167, 0.16);
+  --warning: #f0c04a;
+  --warning-bg: rgba(240, 192, 74, 0.16);
+  --danger: #f07575;
+  --danger-bg: rgba(240, 117, 117, 0.16);
+  --info: #8aa5f5;
+  --info-bg: rgba(138, 165, 245, 0.16);
+
+  /* ── Glassmorphism (dark) ── */
+  --glass-bg: rgba(24, 25, 33, 0.78);
+  --glass-border: rgba(255, 255, 255, 0.09);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+
+  /* ── Surface colors (dark) ── */
+  --bg: #12131a;
+  --bg-card: rgba(30, 32, 43, 0.82);
+  --bg-elevated: #23242f;
+  --bg-muted: #2b2d3a;
+
+  /* ── Text colors (dark) ── */
+  --text-primary: #eceae4;
+  --text-secondary: #a5a3ae;
+  --text-muted: #6f6d7a;
+  --text-inverse: #ffffff;
+
+  /* ── Border & shadow (dark: shadows deepen, borders lighten) ── */
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.3), 0 10px 24px -8px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.35), 0 20px 40px -12px rgba(0, 0, 0, 0.6);
+
+  /* ── Ambient orbs dimmed in dark ── */
+  --orb-opacity: 0.16;
 }

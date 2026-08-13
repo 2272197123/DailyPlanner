@@ -104,8 +104,8 @@ onMounted(() => {
 
 .app-main {
   flex: 1;
-  max-width: none;
-  margin: 0;
+  max-width: 1200px;
+  margin: 0 auto;
   padding: var(--space-6) var(--space-8) var(--space-12);
   width: 100%;
   transition: margin-right var(--duration-normal) var(--ease-out);
@@ -115,12 +115,22 @@ onMounted(() => {
   margin-right: 380px;
 }
 
+@media (min-width: 1600px) {
+  .app-main {
+    max-width: 1320px;
+  }
+}
+
 @media (max-width: 768px) {
   .app-shell {
     padding-left: 0;
   }
   .app-main {
-    padding: var(--space-4);
+    /* 顶部留出汉堡按钮的空间 */
+    padding: calc(var(--space-4) + 44px) var(--space-4) var(--space-8);
+  }
+  .app-main.ai-shifted {
+    margin-right: 0;
   }
 }
 </style>

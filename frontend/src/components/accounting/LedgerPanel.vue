@@ -1,11 +1,13 @@
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useAccountingStore } from '@/stores/accounting'
+import { useThemeStore } from '@/stores/theme'
 import { useToastStore } from '@/stores/toast'
 import { toLocalDate } from '@/utils/format'
 
 const accountingStore = useAccountingStore()
 const toastStore = useToastStore()
+const themeStore = useThemeStore()
 
 const showAddForm = ref(false)
 const pieCanvas = ref(null)
@@ -31,6 +33,12 @@ const periods = [
 
 /* ── Chart colors ── */
 const chartColors = ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#6366f1', '#14b8a6']
+
+/* Canvas 无法解析 var()，需读取计算后的 CSS 变量（背景/文字/网格线随暗色模式变化） */
+function cssVar(name, fallback) {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  return v || fallback
+}
 
 /* ── Draw pie ── */
 function drawPie() {
@@ -69,7 +77,7 @@ function drawPie() {
   // Center hole (donut)
   ctx.beginPath()
   ctx.arc(cx, cy, r * 0.45, 0, Math.PI * 2)
-  ctx.fillStyle = 'var(--bg-card, #fff)'
+  ctx.fillStyle = cssVar('--bg-elevated', '#fff')
   ctx.fill()
 }
 
@@ -89,7 +97,7 @@ function drawBar() {
   const maxVal = Math.max(...trend.value.map(d => Math.max(d.income, d.expense)), 1)
 
   // Grid
-  ctx.strokeStyle = '#e8e4dc'
+  ctx.strokeStyle = cssVar('--border', '#e8e4dc')
   ctx.lineWidth = 0.5
   for (let i = 0; i <= 4; i++) {
     const y = pad.top + (ph / 4) * i
@@ -112,7 +120,7 @@ function drawBar() {
     ctx.fillRect(x + barW, pad.top + ph - ih, barW, ih)
 
     // X label
-    ctx.fillStyle = '#999'
+    ctx.fillStyle = cssVar('--text-muted', '#999')
     ctx.font = '9px system-ui'
     ctx.textAlign = 'center'
     ctx.fillText((d.date || '').slice(5), x + barW, ch - 8)
@@ -148,6 +156,13 @@ async function handleDelete(id) {
 /* ── Watch period ── */
 onMounted(async () => {
   await accountingStore.fetchEntries()
+  await nextTick()
+  drawPie()
+  drawBar()
+})
+
+/* 明暗模式切换后 canvas 颜色需重绘 */
+watch(() => themeStore.mode, async () => {
   await nextTick()
   drawPie()
   drawBar()
@@ -312,10 +327,10 @@ onMounted(async () => {
   font-family: var(--font-data); font-size: var(--text-lg); font-weight: 700;
 }
 
-.lps-card.income .lps-val { color: #22c55e; }
-.lps-card.expense .lps-val { color: #ef4444; }
+.lps-card.income .lps-val { color: var(--success); }
+.lps-card.expense .lps-val { color: var(--danger); }
 .lps-card.balance .lps-val { color: var(--accent); }
-.lps-card.neg .lps-val { color: #ef4444; }
+.lps-card.neg .lps-val { color: var(--danger); }
 
 /* ── Charts ── */
 .lp-charts {
@@ -418,12 +433,20 @@ onMounted(async () => {
 .lpe-note { color: var(--text-muted); flex: 1; font-size: var(--text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lpe-date { font-family: var(--font-data); font-size: var(--text-xs); color: var(--text-muted); }
 .lpe-amt { font-family: var(--font-data); font-weight: 600; }
-.lpe-amt.income { color: #22c55e; }
-.lpe-amt.expense { color: #ef4444; }
+.lpe-amt.income { color: var(--success); }
+.lpe-amt.expense { color: var(--danger); }
 .lpe-del {
   font-size: var(--text-xs); color: var(--text-muted); padding: 2px 4px;
   transition: color var(--duration-fast);
 }
 
 .lpe-del:hover { color: var(--danger); }
+
+@media (max-width: 768px) {
+  .lp-charts { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 480px) {
+  .lp-summary { grid-template-columns: 1fr; }
+}
 </style>

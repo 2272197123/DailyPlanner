@@ -289,7 +289,7 @@ function startResize(e) {
   height: 52px;
   border-radius: 50%;
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
   font-size: 1.5rem;
   box-shadow: var(--shadow-lg);
   z-index: var(--z-sticky);
@@ -303,7 +303,7 @@ function startResize(e) {
 
 .ai-float-btn:hover {
   transform: scale(1.08);
-  box-shadow: 0 8px 28px rgba(30, 32, 48, 0.3);
+  box-shadow: var(--shadow-lg);
 }
 
 .ai-float-btn.has-notification {
@@ -311,8 +311,8 @@ function startResize(e) {
 }
 
 @keyframes float-pulse {
-  0%, 100% { box-shadow: 0 4px 16px rgba(30, 32, 48, 0.2); }
-  50% { box-shadow: 0 4px 28px rgba(30, 32, 48, 0.4), 0 0 0 8px rgba(30, 32, 48, 0.1); }
+  0%, 100% { box-shadow: var(--shadow-md); }
+  50% { box-shadow: var(--shadow-lg), 0 0 0 8px var(--accent-muted); }
 }
 
 /* ── Drawer ── */
@@ -424,7 +424,7 @@ function startResize(e) {
 
 .btn-co-normal { background: var(--accent); color: var(--text-inverse); }
 .btn-co-normal:hover { background: var(--accent-light); }
-.btn-co-hard { background: var(--warning); color: white; }
+.btn-co-hard { background: var(--warning); color: var(--on-accent); }
 .btn-co-hard:hover { filter: brightness(1.1); }
 .btn-co-skip { background: var(--bg-muted); color: var(--text-muted); }
 .btn-co-skip:hover { background: var(--danger-bg); color: var(--danger); }
@@ -587,6 +587,8 @@ function startResize(e) {
   font-size: var(--text-xs);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
 }
 
 .ai-pb-duration {
@@ -596,6 +598,8 @@ function startResize(e) {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   text-align: center;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
 }
 
 .ai-pb-subtasks {
@@ -610,6 +614,8 @@ function startResize(e) {
   font-size: var(--text-xs);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
 }
 
 .ai-preview-actions {
@@ -676,4 +682,15 @@ function startResize(e) {
 
 .ai-send-btn:hover:not(:disabled) { background: var(--accent-light); transform: scale(1.05); }
 .ai-send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* ── Mobile: full-width drawer ── */
+@media (max-width: 768px) {
+  .ai-drawer {
+    width: 100% !important;
+    max-width: 100vw;
+    border-left: none;
+  }
+
+  .ai-resize-handle { display: none; }
+}
 </style>

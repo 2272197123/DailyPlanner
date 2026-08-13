@@ -233,4 +233,26 @@ onMounted(fetchPlans)
   border-radius: var(--radius-full);
   background: transparent;
 }
+
+/* ── 移动端 ── */
+@media (max-width: 768px) {
+  .week-strip {
+    gap: var(--space-1);
+  }
+
+  .ws-arrow {
+    width: 28px;
+    height: 28px;
+  }
+
+  .ws-cell {
+    padding: var(--space-1) 0;
+    gap: 2px;
+  }
+
+  .ws-ring {
+    width: 16px;
+    height: 16px;
+  }
+}
 </style>

@@ -44,6 +44,24 @@
       <section class="set-section">
         <h3>🎨 主题</h3>
         <p class="set-desc">选择界面的主色调，即时生效并同步到账号。</p>
+        <div class="mode-row">
+          <button
+            class="mode-card"
+            :class="{ active: !themeStore.isDark }"
+            @click="selectMode('light')"
+          >
+            <span class="mode-icon">☀</span>
+            <span>白天</span>
+          </button>
+          <button
+            class="mode-card"
+            :class="{ active: themeStore.isDark }"
+            @click="selectMode('dark')"
+          >
+            <span class="mode-icon">☾</span>
+            <span>夜间</span>
+          </button>
+        </div>
         <div class="theme-grid">
           <button
             class="theme-swatch"
@@ -172,13 +190,22 @@ function selectTheme(key) {
   api.put('/prefs', { activeTheme: key || '' }).catch(() => {})
 }
 
+function selectMode(mode) {
+  themeStore.setMode(mode)
+  api.put('/prefs', { mode }).catch(() => {})
+}
+
 async function syncThemeFromServer() {
   // 跨设备同步：以服务端保存的主题为准
   try {
     const { data } = await api.get('/prefs')
-    const serverTheme = unwrap(data)?.activeTheme || null
+    const prefs = unwrap(data) || {}
+    const serverTheme = prefs.activeTheme || null
     if (serverTheme !== themeStore.activeTheme) {
       themeStore.applyTheme(serverTheme || null)
+    }
+    if (prefs.mode && prefs.mode !== themeStore.mode) {
+      themeStore.setMode(prefs.mode)
     }
   } catch { /* 离线时保持本地 */ }
 }
@@ -417,7 +444,7 @@ onMounted(() => {
   text-align: center;
   font-size: 10px;
   color: var(--text-inverse);
-  background: rgba(30, 32, 48, 0.55);
+  background: rgba(0, 0, 0, 0.45);
   opacity: 0;
   transition: opacity var(--duration-fast) var(--ease-out);
 }
@@ -487,6 +514,44 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+}
+
+/* 白天/夜间模式切换卡片 */
+.mode-row {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.mode-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  transition: border-color var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out),
+              transform var(--duration-fast) var(--ease-out);
+}
+
+.mode-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.mode-card.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-muted);
+}
+
+.mode-icon {
+  font-size: 1rem;
 }
 
 .theme-swatch {

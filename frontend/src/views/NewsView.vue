@@ -74,6 +74,13 @@ onMounted(() => {
 <style scoped>
 .news-view {
   max-width: 960px;
+  margin: 0 auto;
+}
+
+@media (min-width: 1440px) {
+  .news-view {
+    max-width: 1100px;
+  }
 }
 
 .page-header {
@@ -217,7 +224,6 @@ onMounted(() => {
   font-size: var(--text-sm);
   color: var(--text-secondary);
   background: var(--warning-bg);
-  border-color: rgba(238, 170, 0, 0.2);
 }
 
 .hint-icon {
