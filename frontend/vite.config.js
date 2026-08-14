@@ -25,6 +25,10 @@ export default defineConfig({
   build: {
     outDir: '../server/static',
     emptyOutDir: true,
-    assetsDir: 'assets'
+    assetsDir: 'assets',
+    // 老内核浏览器兼容（夸克/UC 等 Chromium <104 不支持媒体查询 range 语法
+    // `@media (width<=768px)`，会被整条丢弃导致移动端适配失效）
+    target: 'es2020',
+    cssTarget: 'chrome80'
   }
 })

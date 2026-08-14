@@ -172,12 +172,12 @@ onMounted(() => {
         <table class="admin-table">
           <thead>
             <tr>
-              <th>用户名</th>
+              <th class="col-username">用户名</th>
               <th>昵称</th>
-              <th>邮箱</th>
+              <th class="col-email">邮箱</th>
               <th>角色</th>
               <th>状态</th>
-              <th>注册时间</th>
+              <th class="col-time">注册时间</th>
               <th class="col-actions">操作</th>
             </tr>
           </thead>
@@ -245,7 +245,7 @@ onMounted(() => {
             <tr>
               <th>邀请码</th>
               <th>状态</th>
-              <th>创建时间</th>
+              <th class="col-time">创建时间</th>
               <th class="col-actions">操作</th>
             </tr>
           </thead>
@@ -584,5 +584,46 @@ onMounted(() => {
 .btn-danger-solid:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* ── 移动端适配：隐藏低价值列，收紧间距，剩余内容横向滚动 ── */
+@media (max-width: 768px) {
+  .admin-view {
+    padding: var(--space-2) 0 var(--space-8);
+  }
+
+  .admin-table th,
+  .admin-table td {
+    padding: var(--space-2) var(--space-2);
+  }
+
+  .admin-table .col-username,
+  .admin-table .col-time {
+    display: none;
+  }
+
+  .col-email {
+    word-break: break-all;
+  }
+
+  .col-actions {
+    white-space: normal;
+  }
+
+  .col-actions .btn {
+    margin: 0 var(--space-1) var(--space-1) 0;
+    padding: var(--space-1) var(--space-2);
+  }
+}
+
+/* 窄屏手机：再隐藏邮箱列，优先保证昵称/状态/操作可读 */
+@media (max-width: 480px) {
+  .admin-table .col-email {
+    display: none;
+  }
+
+  .col-actions .btn {
+    font-size: var(--text-xs);
+  }
 }
 </style>

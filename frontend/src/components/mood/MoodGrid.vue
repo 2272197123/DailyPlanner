@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch, nextTick } from 'vue'
+import { computed, ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useMoodStore } from '@/stores/mood'
 import { useToastStore } from '@/stores/toast'
 import { toLocalDate } from '@/utils/format'
@@ -20,6 +20,16 @@ const { staggerEnter, burst } = useAnime()
 const gridRef = ref(null)
 const pickerOpen = ref(false)
 const pickerDate = ref('')
+
+/* ── 移动端适配：小屏缩小格子，并把视图滚动到当前日期附近 ── */
+const windowWidth = ref(window.innerWidth)
+const isMobile = computed(() => windowWidth.value <= 768)
+const effSize = computed(() => (isMobile.value ? 9 : props.cellSize))
+const effGap = computed(() => (isMobile.value ? 2 : props.gap))
+
+function onWindowResize() {
+  windowWidth.value = window.innerWidth
+}
 
 /* ── 已填写格子的小菜单（修改 / 清除记录）── */
 const cellMenu = ref(null) // { date, x, y }
@@ -54,6 +64,32 @@ const weeks = computed(() => {
     while (last.length < 7) last.push(null)
   }
   return cols
+})
+
+// 月份标签宽度跟随格子尺寸：12 个标签均分全年周列（标签间距 12px）
+const monthLabelWidth = computed(() =>
+  Math.max(20, (weeks.value.length / 12) * (effSize.value + effGap.value) - 12)
+)
+
+// 内容超出容器时（移动端），滚动到包含今天的周列
+async function scrollToCurrentWeek() {
+  await nextTick()
+  const el = gridRef.value
+  if (!el || el.scrollWidth <= el.clientWidth) return
+  const idx = weeks.value.findIndex((w) => w.includes(moodStore.today))
+  if (idx < 0) return
+  const weekOffset = effSize.value + effGap.value
+  const target = idx * weekOffset - (el.clientWidth - weekOffset) / 2
+  el.scrollLeft = Math.max(0, Math.min(target, el.scrollWidth - el.clientWidth))
+}
+
+onMounted(() => {
+  window.addEventListener('resize', onWindowResize)
+  scrollToCurrentWeek()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', onWindowResize)
 })
 
 function getMood(date) {
@@ -130,34 +166,45 @@ watch(() => props.year, async (newYear) => {
   if (gridRef.value) {
     staggerEnter('.mood-year-cell', gridRef.value)
   }
+  scrollToCurrentWeek()
 }, { immediate: true })
 </script>
 
 <template>
   <div class="mood-grid" ref="gridRef">
-    <div class="mood-months" :style="{ marginLeft: `${cellSize + gap + 24}px` }">
-      <span v-for="month in months" :key="month" class="month-label">{{ month }}</span>
+    <div class="mood-months" :style="{ marginLeft: `${effSize + effGap + 24}px` }">
+      <span
+        v-for="month in months"
+        :key="month"
+        class="month-label"
+        :style="{ width: `${monthLabelWidth}px` }"
+      >{{ month }}</span>
     </div>
 
     <div class="mood-grid-body">
-      <div class="mood-weekdays" :style="{ width: `${cellSize + gap + 16}px` }">
-        <span v-for="day in weekDays" :key="day" class="weekday-label">{{ day }}</span>
+      <div class="mood-weekdays" :style="{ width: `${effSize + effGap + 16}px` }">
+        <span
+          v-for="(day, dIndex) in weekDays"
+          :key="day"
+          class="weekday-label"
+          :style="{ height: `${effSize}px`, lineHeight: `${effSize}px` }"
+        >{{ isMobile && dIndex % 2 === 1 ? '' : day }}</span>
       </div>
 
-      <div class="mood-weeks" :style="{ gap: `${gap}px` }">
+      <div class="mood-weeks" :style="{ gap: `${effGap}px` }">
         <div
           v-for="(week, wIndex) in weeks"
           :key="wIndex"
           class="mood-week"
-          :style="{ gap: `${gap}px` }"
+          :style="{ gap: `${effGap}px` }"
         >
           <MoodCell
             v-for="(date, dIndex) in week"
             :key="date || `empty-${wIndex}-${dIndex}`"
             :date="date"
             :mood="getMood(date)"
-            :size="cellSize"
-            :gap="gap"
+            :size="effSize"
+            :gap="effGap"
             class="mood-year-cell"
             @click="onCellClick"
           />

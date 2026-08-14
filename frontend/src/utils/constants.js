@@ -20,7 +20,8 @@ export const THEME_PRESETS = {
   noir:   { label: '🖤 墨', accent: '#666' },
   vapor:  { label: '💜 幻', accent: '#7b5ea7' },
   aurora: { label: '🌌 极', accent: '#3a8a7a' },
-  ember:  { label: '🔥 烬', accent: '#b84a3c' }
+  ember:  { label: '🔥 烬', accent: '#b84a3c' },
+  vivid:  { label: '🟠 珀', accent: '#d97706' }
 }
 
 /* ── Storage keys ── */

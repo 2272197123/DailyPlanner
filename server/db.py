@@ -373,13 +373,41 @@ class MySQLDB(DBInterface):
 
     def close(self):
         if self.conn:
-            self.conn.close()
+            try:
+                self.conn.close()
+            except Exception:
+                pass
             self.conn = None
 
+    def _ensure_conn(self):
+        """探活并自动重连。MySQL wait_timeout 默认 8h，长驻进程隔夜后
+        连接会被服务端悄悄关闭（2006 MySQL server has gone away），
+        没有重连机制时之后所有请求都会 500。"""
+        if self.conn is None:
+            self.connect()
+            return
+        try:
+            self.conn.ping(reconnect=True)
+        except Exception:
+            self.close()
+            self.connect()
+
     def execute(self, sql, params=()):
-        cur = self.conn.cursor()
-        cur.execute(sql, params)
-        return cur
+        import pymysql
+        self._ensure_conn()
+        try:
+            cur = self.conn.cursor()
+            cur.execute(sql, params)
+            return cur
+        except pymysql.OperationalError:
+            # 连接在两次查询间隔被断开 → 重连后重试一次（仅重试当前语句，
+            # 死连接上未提交的事务已随连接丢弃，由调用方重新发起）。
+            # 注意：唯一键冲突等 IntegrityError 不在此列，直接向上抛。
+            self.close()
+            self.connect()
+            cur = self.conn.cursor()
+            cur.execute(sql, params)
+            return cur
 
     def fetchone(self, sql, params=()):
         cur = self.execute(sql, params)

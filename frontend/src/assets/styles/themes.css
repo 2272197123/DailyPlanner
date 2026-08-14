@@ -133,3 +133,53 @@
   --bg: #1d1312; --bg-muted: #302019;
   --state-present: var(--accent); --state-present-bg: rgba(212, 117, 104, 0.08);
 }
+
+/* ═══════════════════════════════════════
+   珀 vivid — ui-ux-pro-max 推荐设计系统
+   Style: Vibrant & Block-based（高对比、块状、能量感）
+   Palette: streak amber + habit green
+   ═══════════════════════════════════════ */
+:root[data-theme="vivid"] {
+  --accent: #d97706; --accent-light: #f59e0b; --accent-lighter: #fbbf24;
+  --accent-muted: rgba(217, 119, 6, 0.12);
+  --on-accent: #ffffff;
+  --bg: #fffbeb; --bg-muted: #fcf6f0; --bg-card: #ffffff;
+  --text-primary: #0f172a; --text-secondary: #4b5563; --text-muted: #9ca3af;
+  --border: #f5e8d8; --border-strong: #e8d5b8;
+  --success: #059669; --success-bg: rgba(5, 150, 105, 0.1);
+  --danger: #dc2626; --danger-bg: rgba(220, 38, 38, 0.1);
+  --state-past: #b45309; --state-past-bg: rgba(180, 83, 9, 0.08);
+  --state-present: var(--accent); --state-present-bg: rgba(217, 119, 6, 0.06);
+  --state-future: #059669; --state-future-bg: rgba(5, 150, 105, 0.06);
+  --orb-1: rgba(245, 158, 11, 0.5); --orb-2: rgba(5, 150, 105, 0.35); --orb-3: rgba(217, 119, 6, 0.35);
+  /* 块状风格的更明确边界 */
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06), 0 2px 4px rgba(15, 23, 42, 0.08);
+  --shadow-md: 0 2px 6px rgba(15, 23, 42, 0.07), 0 12px 28px -8px rgba(217, 119, 6, 0.18);
+  --shadow-lg: 0 4px 10px rgba(15, 23, 42, 0.08), 0 24px 48px -12px rgba(217, 119, 6, 0.25);
+}
+
+:root[data-mode="dark"][data-theme="vivid"] {
+  --accent: #f59e0b; --accent-light: #fbbf24; --accent-lighter: #fcd34d;
+  --accent-muted: rgba(245, 158, 11, 0.18);
+  --on-accent: #1a1206;
+  --bg: #191309; --bg-card: rgba(38, 30, 18, 0.85); --bg-elevated: #2b2214; --bg-muted: #332917;
+  --text-primary: #f5efe4; --text-secondary: #b8ad9c; --text-muted: #7d7365;
+  --border: rgba(245, 158, 11, 0.14); --border-strong: rgba(245, 158, 11, 0.24);
+  --success: #34d399; --success-bg: rgba(52, 211, 153, 0.16);
+  --danger: #f87171; --danger-bg: rgba(248, 113, 113, 0.16);
+  --state-past: #fbbf24; --state-past-bg: rgba(251, 191, 36, 0.14);
+  --state-present: var(--accent); --state-present-bg: rgba(245, 158, 11, 0.09);
+  --state-future: #34d399; --state-future-bg: rgba(52, 211, 153, 0.12);
+  --orb-1: rgba(245, 158, 11, 0.4); --orb-2: rgba(5, 150, 105, 0.3); --orb-3: rgba(217, 119, 6, 0.3);
+}
+
+/* vivid 专属：更粗的标题字重 + 更紧的字距（Vibrant 风格的大字体气质） */
+:root[data-theme="vivid"] h1,
+:root[data-theme="vivid"] h2,
+:root[data-theme="vivid"] h3,
+:root[data-theme="vivid"] h4,
+:root[data-theme="vivid"] .section-title,
+:root[data-theme="vivid"] .brand-name {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
