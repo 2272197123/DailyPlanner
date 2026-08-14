@@ -36,6 +36,16 @@ export function toLocalDate(d) {
   return local.toISOString().slice(0, 10)
 }
 
+/** 距离目标日期（YYYY-MM-DD）的整天数：>0 未来，0 今天，<0 已过；无效日期返回 null */
+export function daysUntil(dateStr) {
+  if (!dateStr) return null
+  const target = new Date(dateStr + 'T00:00:00')
+  if (isNaN(target.getTime())) return null
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  return Math.round((target - today) / 86400000)
+}
+
 /** Format date for display */
 export function fmtDate(dateStr) {
   const d = new Date(dateStr + 'T00:00:00')

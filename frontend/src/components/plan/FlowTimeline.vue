@@ -4,19 +4,22 @@ import anime from 'animejs'
 import { useScheduleStore } from '@/stores/schedule'
 import { useRoutineStore } from '@/stores/routines'
 import { useCurrencyStore } from '@/stores/currency'
-import { useAiStore } from '@/stores/ai'
 import { useToastStore } from '@/stores/toast'
-import { calcTaskReward } from '@/utils/format'
+import { toLocalDate, calcTaskReward } from '@/utils/format'
 import { useAnime } from '@/composables/useAnime'
+import { CAT_EMOJI } from '@/utils/constants'
 import TaskCard from '@/components/timeline/TaskCard.vue'
 import RoutineItem from '@/components/timeline/RoutineItem.vue'
+import CardCelebration from '@/components/plan/CardCelebration.vue'
 
-const emit = defineEmits(['add'])
+/* v13 纵向时间轴：从上到下排列一天的任务块与日课，
+   页面滚动时背景色随视口中部的"当前主任务"平滑过渡。 */
+
+const emit = defineEmits(['add', 'rules', 'import'])
 
 const scheduleStore = useScheduleStore()
 const routineStore = useRoutineStore()
 const currencyStore = useCurrencyStore()
-const aiStore = useAiStore()
 const toastStore = useToastStore()
 const { burst } = useAnime()
 
@@ -76,9 +79,87 @@ const isEmpty = computed(() =>
   !scheduleStore.todayBlocks.length && !routineStore.routinesForCurrentDate.length
 )
 
-/* ═══ 完成统计 / 全部完成庆祝 ═══ */
+/* ═══ 头部紧凑进度（吸收原 DayHero 职责）═══ */
 const routineDoneMap = computed(() => scheduleStore.routineProgress[scheduleStore.currentDate] || {})
 
+const stats = computed(() => {
+  const date = scheduleStore.currentDate
+  const blocks = scheduleStore.todayBlocks
+  const routines = routineStore.routinesForCurrentDate
+  const rp = routineDoneMap.value
+  const done = blocks.filter(b => b.completed).length + routines.filter(r => rp[r.id]).length
+  const total = blocks.length + routines.length
+  return { done, total, pct: total ? Math.round(done / total * 100) : 0 }
+})
+
+const xpToday = computed(() => {
+  const todayStr = toLocalDate(new Date())
+  return (currencyStore.transactions || [])
+    .filter(t => t.type === 'earn' && t.timestamp && toLocalDate(new Date(t.timestamp)) === todayStr)
+    .reduce((s, t) => s + (t.amount || 0), 0)
+})
+
+/* ═══ 滚动变色：视口中部的当前主任务决定背景色 ═══ */
+/* category → 色调（UI 元数据，非用户内容；与既有分类体系一致） */
+const CATEGORY_HUES = {
+  study: '74, 125, 215',
+  work: '212, 136, 58',
+  life: '74, 169, 108',
+  health: '212, 95, 95',
+  review: '138, 123, 184',
+  other: '138, 143, 152'
+}
+
+const rootRef = ref(null)
+const ambientColor = ref('') // rgba() 字符串；空 = 主题默认底色
+const currentBlockId = ref(null)
+let observer = null
+const visibleRatios = new Map() // blockId → { ratio, category }
+
+const ambientBg = computed(() => {
+  if (!ambientColor.value) return 'transparent'
+  return `radial-gradient(ellipse 90% 60% at 50% 30%, rgba(${ambientColor.value}, 0.14), rgba(${ambientColor.value}, 0.05) 60%, transparent)`
+})
+
+function pickCurrentBlock() {
+  let best = null
+  let bestRatio = 0
+  for (const [id, info] of visibleRatios) {
+    if (info.ratio > bestRatio) {
+      bestRatio = info.ratio
+      best = { id, category: info.category }
+    }
+  }
+  currentBlockId.value = best ? best.id : null
+  ambientColor.value = best ? (CATEGORY_HUES[best.category] || CATEGORY_HUES.other) : ''
+}
+
+function setupObserver() {
+  if (observer) observer.disconnect()
+  visibleRatios.clear()
+  if (!rootRef.value || !('IntersectionObserver' in window)) {
+    pickCurrentBlock()
+    return
+  }
+  // 视口中部 10% 横带：块穿过该带时视为"当前阅读位置"
+  observer = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      const id = entry.target.dataset.bid
+      if (!id) continue
+      if (entry.isIntersecting) {
+        visibleRatios.set(id, { ratio: entry.intersectionRatio, category: entry.target.dataset.cat || 'other' })
+      } else {
+        visibleRatios.delete(id)
+      }
+    }
+    pickCurrentBlock()
+  }, { rootMargin: '-45% 0px -45% 0px', threshold: [0, 0.5, 1] })
+  rootRef.value.querySelectorAll('.flow-block-shell').forEach(el => observer.observe(el))
+}
+
+watch(rows, () => nextTick(setupObserver), { flush: 'post' })
+
+/* ═══ 完成统计 / 全部完成庆祝 ═══ */
 const allDone = computed(() => {
   const blocks = scheduleStore.todayBlocks
   const routines = routineStore.routinesForCurrentDate
@@ -104,14 +185,12 @@ function celebrate() {
   const date = scheduleStore.currentDate
   celebratedDates.add(date)
 
-  // 多次粒子爆发（不同坐标/颜色）
   const w = window.innerWidth
   const h = window.innerHeight
   burst(w * 0.3, h * 0.35, { count: 16 })
   setTimeout(() => burst(w * 0.7, h * 0.4, { count: 16, colors: ['#4a9', '#d4a76a', '#8a7bb8'] }), 220)
   setTimeout(() => burst(w * 0.5, h * 0.28, { count: 20 }), 420)
 
-  // 朱砂印章浮印：弹入 → 停留 → 淡出
   showSeal.value = true
   nextTick(() => {
     if (!sealRef.value) return
@@ -145,21 +224,32 @@ function maybeCelebrate() {
   }
 }
 
-/* ═══ 勾选完成（XP 防刷分 + 粒子）═══ */
+/* ═══ 勾选完成（XP 防刷分 + 卡牌庆祝）═══ */
+const celebrationRef = ref(null)
+
+function playCelebration(block, reward, event) {
+  celebrationRef.value?.play({
+    x: event?.clientX,
+    y: event?.clientY,
+    subject: block?.subject || '',
+    emoji: CAT_EMOJI[block?.category] || '📌',
+    reward
+  })
+}
+
 function handleToggleTask(blockId, event) {
   const date = scheduleStore.currentDate
   const completed = scheduleStore.toggleBlockDone(date, blockId)
   if (completed === undefined) return
   if (completed) {
     const block = scheduleStore.todayBlocks.find(b => b.id === blockId)
-    const reward = block ? calcTaskReward(block) * 5 : 0
-    if (reward && scheduleStore.awardOnce(date, 'block_' + blockId)) {
-      currencyStore.addXP(reward, '完成任务: ' + (block ? block.subject : blockId))
-      toastStore.ok('🎉 +' + reward + ' XP')
-    } else {
-      toastStore.ok('已完成')
+    let reward = 0
+    const r = block ? calcTaskReward(block) * 5 : 0
+    if (r && scheduleStore.awardOnce(date, 'block_' + blockId)) {
+      reward = r
+      currencyStore.addXP(r, '完成任务: ' + (block ? block.subject : blockId))
     }
-    if (event) burst(event.clientX, event.clientY, { count: 12 })
+    playCelebration(block, reward, event)
     maybeCelebrate()
   }
 }
@@ -169,14 +259,13 @@ function handleToggleSubtask(blockId, si, event) {
   const result = scheduleStore.toggleSubtask(date, blockId, si)
   if (result && result.allDone) {
     const block = scheduleStore.todayBlocks.find(b => b.id === blockId)
-    const reward = block ? calcTaskReward(block) * 5 : 0
-    if (reward && scheduleStore.awardOnce(date, 'block_' + blockId)) {
-      currencyStore.addXP(reward, '完成所有子任务: ' + (block ? block.subject : blockId))
-      toastStore.ok('🎉 +' + reward + ' XP')
-    } else {
-      toastStore.ok('已完成')
+    let reward = 0
+    const r = block ? calcTaskReward(block) * 5 : 0
+    if (r && scheduleStore.awardOnce(date, 'block_' + blockId)) {
+      reward = r
+      currencyStore.addXP(r, '完成所有子任务: ' + (block ? block.subject : blockId))
     }
-    if (event) burst(event.clientX, event.clientY, { count: 12 })
+    playCelebration(block, reward, event)
     maybeCelebrate()
   }
 }
@@ -254,41 +343,56 @@ function removeRoutineItem(id) {
   toastStore.ok('已删除')
 }
 
-/* ═══ 空状态快捷操作 ═══ */
-function openAi() {
-  aiStore.open()
-}
-
 onMounted(() => {
   updateNow()
   nowTimer = setInterval(updateNow, 60000)
+  nextTick(setupObserver)
 })
 
 onUnmounted(() => {
   if (nowTimer) clearInterval(nowTimer)
+  if (observer) observer.disconnect()
 })
 </script>
 
 <template>
-  <div class="utl" :class="'state-' + dateState">
+  <div class="flow-timeline" :class="'state-' + dateState" ref="rootRef">
+    <!-- 滚动变色背景层（固定在视口底层，随当前主任务过渡） -->
+    <div class="flow-ambient" :style="{ background: ambientBg }"></div>
+
+    <!-- 紧凑进度头 -->
+    <div v-if="!isEmpty" class="flow-header">
+      <div class="flow-progress">
+        <span class="flow-pct">{{ stats.pct }}%</span>
+        <div class="flow-track">
+          <div class="flow-bar" :style="{ width: stats.pct + '%' }"></div>
+        </div>
+        <span class="flow-count">{{ stats.done }}/{{ stats.total }} 已完成</span>
+      </div>
+      <span class="flow-xp">✦ 今日 +{{ xpToday }} XP</span>
+    </div>
+
     <!-- 空状态 -->
-    <div v-if="isEmpty" class="utl-empty">
-      <span class="utl-empty-icon">🍃</span>
+    <div v-if="isEmpty" class="flow-empty">
+      <span class="flow-empty-icon">🍃</span>
       <p>今日本无事，庸人自扰之</p>
-      <div class="utl-empty-actions">
-        <button class="btn btn-secondary btn-sm" @click="openAi">🤖 AI 生成</button>
+      <div class="flow-empty-actions">
+        <button class="btn btn-secondary btn-sm" @click="emit('import')">
+          ⏮ 导入前一天计划
+        </button>
+        <button class="btn btn-secondary btn-sm" @click="emit('rules')">🗓 固定日程</button>
         <button class="btn btn-primary btn-sm" @click="emit('add')">＋ 新任务</button>
       </div>
     </div>
 
-    <!-- 统一时间轴 -->
+    <!-- 纵向时间轴 -->
     <template v-else>
       <div
         v-for="row in rows"
         :key="row.key"
-        class="utl-row"
+        class="flow-row"
         :class="{
-          'utl-now-row': row.kind === 'now',
+          'flow-now-row': row.kind === 'now',
           'drag-over': row.kind === 'block' && dragOverId === row.payload.id,
           dragging: row.kind === 'block' && dragId === row.payload.id
         }"
@@ -299,30 +403,38 @@ onUnmounted(() => {
         @dragend="onDragEnd"
       >
         <!-- 现在时刻线 -->
-        <div v-if="row.kind === 'now'" class="utl-now">
-          <span class="utl-now-time">{{ nowStr }}</span>
-          <span class="utl-now-dot"></span>
-          <span class="utl-now-line"></span>
+        <div v-if="row.kind === 'now'" class="flow-now">
+          <span class="flow-now-time">{{ nowStr }}</span>
+          <span class="flow-now-dot"></span>
+          <span class="flow-now-line"></span>
         </div>
 
-        <!-- 任务块（TaskCard 自带时间轨）-->
-        <TaskCard
+        <!-- 任务块（外壳供滚动变色观察；TaskCard 自带时间轨）-->
+        <div
           v-else-if="row.kind === 'block'"
-          :block="row.payload"
-          :index="0"
-          :date-state="dateState"
-          @toggle="handleToggleTask"
-          @toggle-subtask="(si, ev) => handleToggleSubtask(row.payload.id, si, ev)"
-        />
+          class="flow-block-shell"
+          :class="{ 'is-current': currentBlockId === row.payload.id }"
+          :data-bid="row.payload.id"
+          :data-cat="row.payload.category || 'other'"
+        >
+          <span v-if="row.payload.time" class="flow-pin" title="固定日程">📌</span>
+          <TaskCard
+            :block="row.payload"
+            :index="0"
+            :date-state="dateState"
+            @toggle="handleToggleTask"
+            @toggle-subtask="(si, ev) => handleToggleSubtask(row.payload.id, si, ev)"
+          />
+        </div>
 
         <!-- 固定事务（时间轨外壳）-->
-        <div v-else class="utl-routine">
-          <div class="utl-rail">
-            <span class="utl-rail-time">{{ row.payload.time }}</span>
-            <div class="utl-rail-line"></div>
-            <div class="utl-rail-dot" :class="{ done: !!routineDoneMap[row.payload.id] }"></div>
+        <div v-else class="flow-routine">
+          <div class="flow-rail">
+            <span class="flow-rail-time">{{ row.payload.time }}</span>
+            <div class="flow-rail-line"></div>
+            <div class="flow-rail-dot" :class="{ done: !!routineDoneMap[row.payload.id] }"></div>
           </div>
-          <div class="utl-routine-body">
+          <div class="flow-routine-body">
             <RoutineItem
               :routine="row.payload"
               :date="scheduleStore.currentDate"
@@ -334,21 +446,21 @@ onUnmounted(() => {
       </div>
 
       <!-- 任意时间组 -->
-      <div v-if="anytimeRoutines.length || showRoutineMgr" class="utl-anytime">
-        <div class="utl-anytime-head">
-          <span class="utl-anytime-title">⏳ 任意时间</span>
+      <div v-if="anytimeRoutines.length || showRoutineMgr" class="flow-anytime">
+        <div class="flow-anytime-head">
+          <span class="flow-anytime-title">⏳ 任意时间</span>
           <button class="btn btn-ghost btn-sm" @click="showRoutineMgr = !showRoutineMgr">
             {{ showRoutineMgr ? '收起' : '管理' }}
           </button>
         </div>
 
-        <div v-for="r in anytimeRoutines" :key="'ar_' + r.id" class="utl-routine anytime">
-          <div class="utl-rail">
-            <span class="utl-rail-time">--:--</span>
-            <div class="utl-rail-line"></div>
-            <div class="utl-rail-dot" :class="{ done: !!routineDoneMap[r.id] }"></div>
+        <div v-for="r in anytimeRoutines" :key="'ar_' + r.id" class="flow-routine anytime">
+          <div class="flow-rail">
+            <span class="flow-rail-time">--:--</span>
+            <div class="flow-rail-line"></div>
+            <div class="flow-rail-dot" :class="{ done: !!routineDoneMap[r.id] }"></div>
           </div>
-          <div class="utl-routine-body">
+          <div class="flow-routine-body">
             <RoutineItem
               :routine="r"
               :date="scheduleStore.currentDate"
@@ -360,7 +472,7 @@ onUnmounted(() => {
       </div>
 
       <!-- 固定事务模板管理面板 -->
-      <div v-if="showRoutineMgr" class="utl-mgr">
+      <div v-if="showRoutineMgr" class="flow-mgr">
         <div v-for="r in routineStore.routines" :key="'tpl_' + r.id" class="mgr-row">
           <span class="mgr-icon">{{ r.icon || '🔁' }}</span>
           <span class="mgr-name">{{ r.name }}</span>
@@ -377,7 +489,7 @@ onUnmounted(() => {
       </div>
 
       <!-- 固定事务管理入口（无任意时间组时也要可达）-->
-      <div v-if="!anytimeRoutines.length && !showRoutineMgr" class="utl-mgr-entry">
+      <div v-if="!anytimeRoutines.length && !showRoutineMgr" class="flow-mgr-entry">
         <button class="btn btn-ghost btn-sm" @click="showRoutineMgr = true">🔁 管理固定事务</button>
       </div>
     </template>
@@ -388,41 +500,140 @@ onUnmounted(() => {
         <div ref="sealRef" class="day-seal">今日毕</div>
       </div>
     </Teleport>
+
+    <!-- 单任务完成：卡牌翻转庆祝 -->
+    <CardCelebration ref="celebrationRef" />
   </div>
 </template>
 
 <style scoped>
-.utl {
+.flow-timeline {
+  position: relative;
   max-width: 680px;
   margin: 0 auto;
   padding-bottom: var(--space-12);
 }
 
+/* ── 滚动变色背景层 ── */
+.flow-ambient {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  transition: background 1.2s var(--ease-out);
+}
+
+/* ── 紧凑进度头 ── */
+.flow-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.flow-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
+}
+
+.flow-pct {
+  font-family: var(--font-data);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.flow-track {
+  flex: 1;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--bg-muted);
+  overflow: hidden;
+}
+
+.flow-bar {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  transition: width var(--duration-normal) var(--ease-out);
+}
+
+.flow-count {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.flow-xp {
+  font-size: var(--text-xs);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
 /* ── Rows ── */
-.utl-row {
+.flow-row {
   position: relative;
   border-top: 2px solid transparent;
   transition: border-color var(--duration-fast) var(--ease-out),
               opacity var(--duration-fast) var(--ease-out);
 }
 
-.utl-row.dragging {
+.flow-row.dragging {
   opacity: 0.45;
 }
 
-.utl-row.drag-over {
+.flow-row.drag-over {
   border-top-color: var(--accent);
 }
 
+/* ── 任务块外壳：当前主任务高亮 ── */
+.flow-block-shell {
+  position: relative;
+  border-radius: var(--radius-lg);
+  transition: transform var(--duration-normal) var(--ease-out);
+}
+
+.flow-block-shell :deep(.task-card) {
+  transition: border-color var(--duration-normal) var(--ease-out),
+              box-shadow var(--duration-normal) var(--ease-out),
+              transform var(--duration-normal) var(--ease-out);
+}
+
+.flow-block-shell.is-current :deep(.task-card) {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-md);
+  transform: scale(1.01);
+}
+
+.flow-pin {
+  position: absolute;
+  top: -8px;
+  right: var(--space-3);
+  z-index: 2;
+  font-size: 12px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+}
+
 /* ── 现在时刻线 ── */
-.utl-now {
+.flow-now {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-1) 0;
 }
 
-.utl-now-time {
+.flow-now-time {
   width: 52px;
   flex-shrink: 0;
   text-align: center;
@@ -432,7 +643,7 @@ onUnmounted(() => {
   color: var(--accent);
 }
 
-.utl-now-dot {
+.flow-now-dot {
   width: 8px;
   height: 8px;
   flex-shrink: 0;
@@ -441,7 +652,7 @@ onUnmounted(() => {
   box-shadow: 0 0 0 3px var(--accent-muted);
 }
 
-.utl-now-line {
+.flow-now-line {
   flex: 1;
   height: 2px;
   background: var(--accent);
@@ -449,13 +660,13 @@ onUnmounted(() => {
   opacity: 0.7;
 }
 
-/* ── 固定事务时间轨（与 TaskCard 的 pipe 视觉对齐）── */
-.utl-routine {
+/* ── 固定事务时间轨 ── */
+.flow-routine {
   display: flex;
   gap: var(--space-3);
 }
 
-.utl-rail {
+.flow-rail {
   width: 52px;
   flex-shrink: 0;
   display: flex;
@@ -464,21 +675,21 @@ onUnmounted(() => {
   padding-top: 2px;
 }
 
-.utl-rail-time {
+.flow-rail-time {
   font-family: var(--font-data);
   font-size: 10px;
   color: var(--text-muted);
   margin-bottom: var(--space-1);
 }
 
-.utl-rail-line {
+.flow-rail-line {
   width: 2px;
   flex: 1;
   background: var(--border);
   min-height: 100%;
 }
 
-.utl-rail-dot {
+.flow-rail-dot {
   width: 10px;
   height: 10px;
   border-radius: var(--radius-full);
@@ -487,40 +698,40 @@ onUnmounted(() => {
   margin-top: -5px;
 }
 
-.state-past .utl-rail-dot { background: var(--state-past); }
-.state-future .utl-rail-dot { background: var(--state-future); }
-.utl-rail-dot.done { background: var(--success); }
+.state-past .flow-rail-dot { background: var(--state-past); }
+.state-future .flow-rail-dot { background: var(--state-future); }
+.flow-rail-dot.done { background: var(--success); }
 
-.utl-routine-body {
+.flow-routine-body {
   flex: 1;
   min-width: 0;
 }
 
 /* RoutineItem 自带 margin-top，外壳内去掉避免双间距 */
-.utl-routine-body :deep(.routine-item) {
+.flow-routine-body :deep(.routine-item) {
   margin-top: 0;
 }
 
 /* ── 任意时间组 ── */
-.utl-anytime {
+.flow-anytime {
   margin-top: var(--space-4);
 }
 
-.utl-anytime-head {
+.flow-anytime-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: var(--space-2) 0;
 }
 
-.utl-anytime-title {
+.flow-anytime-title {
   font-size: var(--text-xs);
   font-weight: 600;
   color: var(--text-muted);
 }
 
 /* ── 模板管理面板 ── */
-.utl-mgr {
+.flow-mgr {
   margin-top: var(--space-3);
   padding: var(--space-4);
   background: var(--bg-card);
@@ -586,55 +797,29 @@ onUnmounted(() => {
 .mgr-name-input { flex: 1; min-width: 0; }
 .mgr-time-input { width: 100px; font-family: var(--font-data); }
 
-.utl-mgr-entry {
+.flow-mgr-entry {
   margin-top: var(--space-4);
   text-align: center;
 }
 
-/* ── 移动端 ── */
-@media (max-width: 768px) {
-  .utl {
-    padding-bottom: var(--space-8);
-  }
-
-  /* 模板管理添加行：名称独占一行，其余换行排列 */
-  .mgr-add {
-    flex-wrap: wrap;
-  }
-
-  .mgr-name-input {
-    flex: 1 1 100%;
-    order: -1;
-  }
-
-  .mgr-icon-input {
-    flex: 1;
-    width: auto;
-  }
-
-  .mgr-time-input {
-    flex: 2;
-    width: auto;
-  }
-}
-
 /* ── 空状态 ── */
-.utl-empty {
+.flow-empty {
   text-align: center;
   padding: var(--space-12) var(--space-4);
   color: var(--text-secondary);
 }
 
-.utl-empty-icon {
+.flow-empty-icon {
   font-size: 3rem;
   display: block;
   margin-bottom: var(--space-4);
   animation: float 3s ease-in-out infinite;
 }
 
-.utl-empty-actions {
+.flow-empty-actions {
   display: flex;
   justify-content: center;
+  flex-wrap: wrap;
   gap: var(--space-3);
   margin-top: var(--space-5);
 }
@@ -668,5 +853,42 @@ onUnmounted(() => {
   box-shadow: 0 8px 32px var(--danger-bg);
   writing-mode: vertical-rl;
   opacity: 0;
+}
+
+/* ── 移动端 ── */
+@media (max-width: 768px) {
+  .flow-timeline {
+    padding-bottom: var(--space-8);
+  }
+
+  .flow-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-2);
+  }
+
+  .flow-xp {
+    text-align: right;
+  }
+
+  /* 模板管理添加行：名称独占一行，其余换行排列 */
+  .mgr-add {
+    flex-wrap: wrap;
+  }
+
+  .mgr-name-input {
+    flex: 1 1 100%;
+    order: -1;
+  }
+
+  .mgr-icon-input {
+    flex: 1;
+    width: auto;
+  }
+
+  .mgr-time-input {
+    flex: 2;
+    width: auto;
+  }
 }
 </style>

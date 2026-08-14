@@ -137,8 +137,8 @@ function handleDelete() {
       <div class="ctp-dot" :class="{ pulsing: !block.completed }"></div>
     </div>
 
-    <!-- Card body -->
-    <div class="card-body" @click.self="emit('toggle', block.id, $event)">
+    <!-- Card body（整卡点击切换完成；内部交互区均已 @click.stop） -->
+    <div class="card-body" @click="emit('toggle', block.id, $event)">
       <!-- Header row -->
       <div class="card-header">
         <span class="card-icon">{{ catEmoji }}</span>
@@ -189,7 +189,7 @@ function handleDelete() {
       </div>
 
       <!-- Inline timer -->
-      <div class="card-timer">
+      <div class="card-timer" @click.stop>
         <div class="ctimer-bar" v-if="timerRunning || timerSec > 0">
           <div class="ctimer-fill" :style="{ width: Math.min(timerRatio * 100, 100) + '%', background: timerColor }"></div>
         </div>
@@ -655,6 +655,11 @@ function handleDelete() {
   /* 头部一行放不下时允许换行，按钮组靠右 */
   .card-header {
     flex-wrap: wrap;
+  }
+
+  /* 标题保证最小宽度，避免被时长/XP/按钮挤成逐字竖排 */
+  .card-title {
+    flex: 1 1 7em;
   }
 
   .card-actions {

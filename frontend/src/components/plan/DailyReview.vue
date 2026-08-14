@@ -209,9 +209,8 @@ async function handleDelete() {
 
 <style scoped>
 .review-panel {
-  max-width: 680px;
-  margin: var(--space-6) auto;
-  padding: var(--space-5);
+  width: 100%;
+  padding: var(--space-4);
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);

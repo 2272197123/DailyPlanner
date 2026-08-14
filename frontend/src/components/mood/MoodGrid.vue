@@ -66,10 +66,15 @@ const weeks = computed(() => {
   return cols
 })
 
-// 月份标签宽度跟随格子尺寸：12 个标签均分全年周列（标签间距 12px）
-const monthLabelWidth = computed(() =>
-  Math.max(20, (weeks.value.length / 12) * (effSize.value + effGap.value) - 12)
-)
+// 月份标签定位到每月 1 日所在的周列（真实对齐，而非均分）
+const monthOffsets = computed(() => {
+  const w = effSize.value + effGap.value
+  return months.map((label, m) => {
+    const firstDay = `${props.year}-${String(m + 1).padStart(2, '0')}-01`
+    const weekIdx = weeks.value.findIndex(week => week.includes(firstDay))
+    return { label, left: (weekIdx < 0 ? 0 : weekIdx) * w }
+  })
+})
 
 // 内容超出容器时（移动端），滚动到包含今天的周列
 async function scrollToCurrentWeek() {
@@ -123,12 +128,7 @@ function onCellClick(date, event) {
     return
   }
 
-  // 过去日期的空白格子 → 防止误点，需确认补记（当天不确认）
-  if (date < moodStore.today) {
-    const d = new Date(date + 'T00:00:00')
-    if (!window.confirm(`要为 ${d.getMonth() + 1}月${d.getDate()}日 补记心情吗？`)) return
-  }
-
+  // 空白格子（含过去日期补记）→ 直接打开选择器
   openPicker(date, event)
 }
 
@@ -174,11 +174,11 @@ watch(() => props.year, async (newYear) => {
   <div class="mood-grid" ref="gridRef">
     <div class="mood-months" :style="{ marginLeft: `${effSize + effGap + 24}px` }">
       <span
-        v-for="month in months"
-        :key="month"
+        v-for="m in monthOffsets"
+        :key="m.label"
         class="month-label"
-        :style="{ width: `${monthLabelWidth}px` }"
-      >{{ month }}</span>
+        :style="{ left: `${m.left}px` }"
+      >{{ m.label }}</span>
     </div>
 
     <div class="mood-grid-body">
@@ -205,6 +205,7 @@ watch(() => props.year, async (newYear) => {
             :mood="getMood(date)"
             :size="effSize"
             :gap="effGap"
+            :is-today="date === moodStore.today"
             class="mood-year-cell"
             @click="onCellClick"
           />
@@ -212,14 +213,17 @@ watch(() => props.year, async (newYear) => {
       </div>
     </div>
 
-    <MoodPicker
-      v-if="pickerOpen"
-      :date="pickerDate"
-      :mood="getMood(pickerDate)"
-      @close="pickerOpen = false"
-      @save="onSaveMood"
-      @delete="onDeleteMood"
-    />
+    <!-- 选择器必须 Teleport：祖先的 backdrop-filter / overflow 会把 fixed 定位截断（老内核浏览器会闪动） -->
+    <Teleport to="body">
+      <MoodPicker
+        v-if="pickerOpen"
+        :date="pickerDate"
+        :mood="getMood(pickerDate)"
+        @close="pickerOpen = false"
+        @save="onSaveMood"
+        @delete="onDeleteMood"
+      />
+    </Teleport>
 
     <!-- 已填写格子的操作小菜单 -->
     <Teleport to="body">
@@ -241,17 +245,18 @@ watch(() => props.year, async (newYear) => {
 }
 
 .mood-months {
-  display: flex;
-  gap: 12px;
+  position: relative;
+  height: 16px;
   margin-bottom: var(--space-2);
   font-size: var(--text-xs);
   color: var(--text-muted);
+  min-width: max-content;
 }
 
 .month-label {
-  width: 70px;
-  text-align: left;
-  flex-shrink: 0;
+  position: absolute;
+  top: 0;
+  white-space: nowrap;
 }
 
 .mood-grid-body {

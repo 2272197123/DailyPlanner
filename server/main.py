@@ -18,7 +18,8 @@ from server.models import (
     MoodEntry, LedgerEntry,
     UserCreate, UserLogin, AuthResponse, TokenRefresh, AdminResetPassword,
     SendEmailCode, ProfileUpdate,
-    GeneratePlanRequest, GeneratePlanResponse,
+    # v13: AI 计划生成已下线（端点见下方注释块），模型保留以便后续升级
+    # GeneratePlanRequest, GeneratePlanResponse,
 )
 from server.db import (
     init_db, get_plan, save_plan, delete_plan, list_plans,
@@ -39,7 +40,9 @@ from server.db import (
     log_admin_action, list_admin_actions,
 )
 from server.ratelimit import is_rate_limited, client_ip
-from server.ai_proxy import generate_daily_plan
+from server.news import catalog as news_catalog, fetch_feed as news_fetch_feed
+# v13: AI 计划生成已下线（端点见下方注释块），import 保留以便后续升级
+# from server.ai_proxy import generate_daily_plan
 from server.auth import (
     create_user, create_guest, authenticate_user, hash_password,
     create_access_token, create_refresh_token, decode_token,
@@ -706,39 +709,106 @@ async def api_save_routines(body: dict, user: dict = Depends(require_user)):
 
 
 # ═══════════════════════════════════════
-# AI 每日计划生成 API（v8.0）
+# 计划预设 & 周期固定日程 API（v13.0）
+# 预设：每天计划自动留存的结构快照，用于次日自动预填；
+# 周期规则：学期课表/班表等按星期重复的长效日程，
+# 加载空日期时物化为当天任务块。全部按用户隔离，无任何内置内容。
 # ═══════════════════════════════════════
 
-@app.post("/api/generate-plan", response_model=GeneratePlanResponse)
-async def api_generate_plan(body: GeneratePlanRequest, user: dict = Depends(require_user)):
-    """调用 AI（DeepSeek）生成每日计划 JSON。
+@app.get("/api/plan-preset")
+async def api_get_plan_preset(user: dict = Depends(require_user)):
+    v = get_state(user["user_id"], "plan_preset")
+    try:
+        data = json.loads(v) if v else None
+    except Exception:
+        data = None
+    return {"ok": True, "data": data}
 
-    请求体：{ date, dayMode, feedback, goalId? }
-    返回：{ ok, plan: {...}, usage: {prompt_tokens, ...}, elapsed, message }
-    """
-    result = generate_daily_plan(
-        for_date=body.date,
-        day_mode=body.dayMode,
-        feedback=body.feedback,
-        goal_id=body.goalId,
-        user_id=user["user_id"],
-    )
 
-    if not result["ok"]:
-        return GeneratePlanResponse(
-            ok=False,
-            message=result["message"],
-            usage=result.get("usage"),
-            elapsed=result.get("elapsed", 0),
-        )
+@app.put("/api/plan-preset")
+async def api_save_plan_preset(body: dict, user: dict = Depends(require_user)):
+    set_state(user["user_id"], "plan_preset",
+              json.dumps(body.get("preset"), ensure_ascii=False))
+    return {"ok": True, "message": "预设已更新"}
 
-    return GeneratePlanResponse(
-        ok=True,
-        plan=result["plan"],
-        usage=result["usage"],
-        elapsed=result.get("elapsed", 0),
-        message=result["message"],
-    )
+
+@app.get("/api/recurring-rules")
+async def api_get_recurring_rules(user: dict = Depends(require_user)):
+    v = get_state(user["user_id"], "recurring_rules")
+    try:
+        data = json.loads(v) if v else []
+    except Exception:
+        data = []
+    return {"ok": True, "data": data}
+
+
+@app.put("/api/recurring-rules")
+async def api_save_recurring_rules(body: dict, user: dict = Depends(require_user)):
+    rules = body.get("rules", [])
+    set_state(user["user_id"], "recurring_rules", json.dumps(rules, ensure_ascii=False))
+    return {"ok": True, "message": f"已保存 {len(rules)} 条固定日程"}
+
+
+# ═══════════════════════════════════════
+# 新闻聚合 API（v13.0）
+# 多源免费新闻：目录 + 聚合抓取（服务端 10 分钟缓存）。
+# 用户勾选的源存在 /api/prefs 的 newsSources 键（前端管理）。
+# ═══════════════════════════════════════
+
+@app.get("/api/news/catalog")
+async def api_news_catalog(user: dict = Depends(require_user)):
+    """可选新闻源目录（含领域分组）"""
+    return {"ok": True, "data": news_catalog()}
+
+
+@app.get("/api/news/feed")
+async def api_news_feed(sources: str = "", user: dict = Depends(require_user)):
+    """聚合抓取勾选的新闻源；sources 为逗号分隔的源 id，空则返回空"""
+    ids = [s.strip() for s in sources.split(",") if s.strip()]
+    if not ids:
+        return {"ok": True, "data": {"sections": [], "errors": {}, "fetched_at": ""}}
+    feed = await news_fetch_feed(ids)
+    return {"ok": True, "data": feed}
+
+
+# ═══════════════════════════════════════
+# AI 每日计划生成 API（v8.0）
+# ───────────────────────────────────────
+# v13.0：计划改为用户自维护（预设链 + 周期规则导入），
+# AI 生成入口已下线。端点与 ai_proxy.py 整体保留并注释，
+# 后续升级时取消注释（含顶部两处 import）即可恢复。
+# ═══════════════════════════════════════
+
+# @app.post("/api/generate-plan", response_model=GeneratePlanResponse)
+# async def api_generate_plan(body: GeneratePlanRequest, user: dict = Depends(require_user)):
+#     """调用 AI（DeepSeek）生成每日计划 JSON。
+#
+#     请求体：{ date, dayMode, feedback, goalId? }
+#     返回：{ ok, plan: {...}, usage: {prompt_tokens, ...}, elapsed, message }
+#     """
+#     result = generate_daily_plan(
+#         for_date=body.date,
+#         day_mode=body.dayMode,
+#         feedback=body.feedback,
+#         goal_id=body.goalId,
+#         user_id=user["user_id"],
+#     )
+#
+#     if not result["ok"]:
+#         return GeneratePlanResponse(
+#             ok=False,
+#             message=result["message"],
+#             usage=result.get("usage"),
+#             elapsed=result.get("elapsed", 0),
+#         )
+#
+#     return GeneratePlanResponse(
+#         ok=True,
+#         plan=result["plan"],
+#         usage=result["usage"],
+#         elapsed=result.get("elapsed", 0),
+#         message=result["message"],
+#     )
 
 
 @app.get("/api/ai-usage")

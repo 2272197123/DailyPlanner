@@ -12,7 +12,6 @@ import { useGoalStore } from '@/stores/goals'
 import { useAccountingStore } from '@/stores/accounting'
 import { useRoutineStore } from '@/stores/routines'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
-import DailyReview from '@/components/layout/DailyReview.vue'
 import AiDrawer from '@/components/ai/AiDrawer.vue'
 import ToastContainer from '@/components/shared/ToastContainer.vue'
 
@@ -81,7 +80,6 @@ onMounted(() => {
     </main>
 
     <template v-if="!isPublicPage">
-      <DailyReview />
       <AiDrawer />
     </template>
     <ToastContainer />

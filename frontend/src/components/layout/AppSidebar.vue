@@ -7,6 +7,8 @@ import { useCurrencyStore } from '@/stores/currency'
 import { useThemeStore } from '@/stores/theme'
 import { useAnime } from '@/composables/useAnime'
 import { toLocalDate } from '@/utils/format'
+import api from '@/api/client'
+import MoodPicker from '@/components/mood/MoodPicker.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -38,6 +40,12 @@ const navItems = computed(() => {
 async function handleLogout() {
   await auth.logout()
   router.push({ name: 'login' })
+}
+
+/* 白天/夜间切换：即时生效并同步到账号偏好（跨设备） */
+function toggleThemeMode() {
+  themeStore.toggleMode()
+  api.put('/prefs', { mode: themeStore.mode }).catch(() => {})
 }
 
 /* 昵称优先，回退邮箱/用户名 */
@@ -82,25 +90,29 @@ function getCellColor(date) {
   return mood.color + Math.round(alpha * 255).toString(16).padStart(2, '0')
 }
 
-async function handleCellClick(date, event) {
-  const existing = getMood(date)
-  if (existing) {
-    await moodStore.saveMood(date, { ...existing, note: ventText.value || existing.note })
-  } else {
-    const preset = MOOD_PRESETS[Math.floor(Math.random() * MOOD_PRESETS.length)]
-    await moodStore.saveMood(date, {
-      color: preset.color,
-      label: preset.label,
-      note: ventText.value,
-      intensity: 2
-    })
-  }
+/* 心情格子：点击弹出正规选择器（不再随机指派心情） */
+const moodPickerOpen = ref(false)
+const moodPickerDate = ref('')
+
+function handleCellClick(date, event) {
+  moodPickerDate.value = date
+  moodPickerOpen.value = true
 
   const rect = event.target.getBoundingClientRect()
   burst(rect.left + rect.width / 2, rect.top + rect.height / 2, {
     count: 10,
     colors: ['#f59e0b', '#3b82f6', '#10b981', '#ef4444']
   })
+}
+
+async function onMoodSave(payload) {
+  await moodStore.saveMood(moodPickerDate.value, payload)
+  moodPickerOpen.value = false
+}
+
+function onMoodDelete() {
+  moodStore.deleteMood(moodPickerDate.value)
+  moodPickerOpen.value = false
 }
 
 async function submitVent(event) {
@@ -142,6 +154,13 @@ watch(() => route.name, () => {
     aria-label="打开菜单"
     @click="mobileOpen = true"
   >☰</button>
+  <!-- 移动端：快捷白天/夜间切换（右上角，无需打开抽屉） -->
+  <button
+    class="mobile-theme-btn"
+    :title="themeStore.isDark ? '切换到白天模式' : '切换到夜间模式'"
+    :aria-label="themeStore.isDark ? '切换到白天模式' : '切换到夜间模式'"
+    @click="toggleThemeMode"
+  >{{ themeStore.isDark ? '☀' : '☾' }}</button>
   <div v-if="mobileOpen" class="sidebar-backdrop" @click="mobileOpen = false"></div>
 
   <aside class="app-sidebar" :class="{ collapsed, open: mobileOpen }">
@@ -154,7 +173,7 @@ watch(() => route.name, () => {
         <button
           class="collapse-btn"
           :title="themeStore.isDark ? '切换到白天模式' : '切换到夜间模式'"
-          @click="themeStore.toggleMode()"
+          @click="toggleThemeMode"
         >{{ themeStore.isDark ? '☀' : '☾' }}</button>
         <button class="collapse-btn" @click="collapsed = !collapsed" title="折叠/展开">
           {{ collapsed ? '»' : '«' }}
@@ -217,10 +236,10 @@ watch(() => route.name, () => {
         <span class="level-xp">{{ currencyStore.balance }} XP</span>
       </div>
       <div class="footer-user">
-        <span class="footer-avatar">
+        <router-link :to="{ name: 'settings' }" class="footer-avatar" title="打开设置">
           <img v-if="auth.user?.avatar" :src="auth.user.avatar" class="footer-avatar-img" alt="" />
           <span v-else class="footer-avatar-initial">{{ footerInitial }}</span>
-        </span>
+        </router-link>
         <span class="footer-username" :title="auth.user?.email || ''">
           {{ displayName }}
           <em v-if="auth.isGuest" class="guest-tag">游客</em>
@@ -229,6 +248,18 @@ watch(() => route.name, () => {
       </div>
       <span class="footer-hint">Ctrl+Enter 快捷发送</span>
     </div>
+
+    <!-- 心情选择器（点击心情格子弹出；必须 Teleport，aside 的 backdrop-filter 会截断 fixed 定位） -->
+    <Teleport to="body">
+      <MoodPicker
+        v-if="moodPickerOpen"
+        :date="moodPickerDate"
+        :mood="getMood(moodPickerDate)"
+        @close="moodPickerOpen = false"
+        @save="onMoodSave"
+        @delete="onMoodDelete"
+      />
+    </Teleport>
   </aside>
 </template>
 
@@ -503,6 +534,15 @@ watch(() => route.name, () => {
   overflow: hidden;
   background: var(--accent-muted);
   border: 1px solid var(--border);
+  display: block;
+  cursor: pointer;
+  transition: transform var(--duration-fast) var(--ease-out),
+              border-color var(--duration-fast) var(--ease-out);
+}
+
+.footer-avatar:hover {
+  transform: scale(1.12);
+  border-color: var(--accent);
 }
 
 .footer-avatar-img {
@@ -554,6 +594,10 @@ watch(() => route.name, () => {
   display: none;
 }
 
+.mobile-theme-btn {
+  display: none;
+}
+
 .sidebar-backdrop {
   display: none;
 }
@@ -595,6 +639,26 @@ watch(() => route.name, () => {
   }
   .mobile-menu-btn.hidden {
     display: none;
+  }
+
+  .mobile-theme-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    top: var(--space-3);
+    right: var(--space-3);
+    z-index: var(--z-sticky);
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-md);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: var(--shadow-md);
+    color: var(--text-primary);
+    font-size: 1.1rem;
   }
 
   .sidebar-backdrop {

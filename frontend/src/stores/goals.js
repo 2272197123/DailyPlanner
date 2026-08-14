@@ -8,11 +8,18 @@ export const useGoalStore = defineStore('goals', {
   }),
 
   getters: {
+    /* 倒数日（kind === 'countdown'）与长期目标共用同一份存储，按日期升序 */
+    countdowns(state) {
+      return (state.bigGoals || [])
+        .filter(g => g.kind === 'countdown' && g.date)
+        .slice()
+        .sort((a, b) => a.date < b.date ? -1 : 1)
+    },
     activeGoals(state) {
-      return (state.bigGoals || []).filter(g => !g.completed)
+      return (state.bigGoals || []).filter(g => g.kind !== 'countdown' && !g.completed)
     },
     completedGoals(state) {
-      return (state.bigGoals || []).filter(g => g.completed)
+      return (state.bigGoals || []).filter(g => g.kind !== 'countdown' && g.completed)
     },
     totalProgress(state) {
       const active = this.activeGoals

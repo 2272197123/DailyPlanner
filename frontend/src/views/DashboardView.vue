@@ -5,7 +5,8 @@ import { useMoodStore } from '@/stores/mood'
 import { useCurrencyStore } from '@/stores/currency'
 import { useAccountingStore } from '@/stores/accounting'
 import { useNewsStore } from '@/stores/news'
-import { toLocalDate } from '@/utils/format'
+import { useGoalStore } from '@/stores/goals'
+import { toLocalDate, daysUntil } from '@/utils/format'
 import { useAnime } from '@/composables/useAnime'
 
 const scheduleStore = useScheduleStore()
@@ -13,6 +14,7 @@ const moodStore = useMoodStore()
 const currencyStore = useCurrencyStore()
 const accountingStore = useAccountingStore()
 const newsStore = useNewsStore()
+const goalStore = useGoalStore()
 const { staggerEnter } = useAnime()
 
 const mounted = ref(false)
@@ -33,8 +35,26 @@ const monthSummary = computed(() => {
   return { income, expense }
 })
 
-/* ── 科技热点（当前为内置示例数据，如实标注来源）── */
-const topNews = computed(() => (newsStore.filteredItems || []).slice(0, 3))
+/* ── 新闻热点（v13：来自服务端聚合的真实新闻流）── */
+const topNews = computed(() => {
+  const out = []
+  for (const sec of newsStore.sections || []) {
+    for (const item of sec.items || []) {
+      out.push({ title: item.title, sourceName: sec.name, url: item.url })
+      if (out.length >= 3) return out
+    }
+  }
+  return out
+})
+
+/* ── 最近的倒数日（今天或未来最近的一个）── */
+const nextCountdown = computed(() => {
+  for (const cd of goalStore.countdowns) {
+    const d = daysUntil(cd.date)
+    if (d !== null && d >= 0) return { ...cd, days: d }
+  }
+  return null
+})
 
 const greeting = computed(() => {
   const hour = new Date().getHours()
@@ -48,7 +68,8 @@ const greeting = computed(() => {
 onMounted(() => {
   scheduleStore.fetchDay(scheduleStore.currentDate)
   accountingStore.fetchEntries()
-  newsStore.loadSources()
+  newsStore.init()
+  goalStore.fetchGoals()
   mounted.value = true
   requestAnimationFrame(() => {
     staggerEnter('.dash-card', document.querySelector('.dashboard-view'))
@@ -105,15 +126,37 @@ onMounted(() => {
         <div class="card-icon">✦</div>
         <div class="card-meta">
           <div class="card-value">{{ topNews.length }} 条</div>
-          <div class="card-label">科技热点</div>
+          <div class="card-label">新闻热点</div>
         </div>
         <div class="card-hint news-hint">
-          <div v-for="item in topNews" :key="item.id" class="news-line">
-            <span class="news-src">[{{ item.source }}]</span> {{ item.title }}
+          <div v-for="(item, i) in topNews" :key="i" class="news-line">
+            <span class="news-src">[{{ item.sourceName }}]</span> {{ item.title }}
           </div>
         </div>
       </div>
     </div>
+
+    <!-- 最近倒数日横幅 -->
+    <router-link
+      v-if="nextCountdown"
+      :to="{ name: 'plan' }"
+      class="cd-banner card"
+      :class="{ today: nextCountdown.days === 0 }"
+    >
+      <span class="cd-banner-icon">⏳</span>
+      <div class="cd-banner-info">
+        <span class="cd-banner-title">{{ nextCountdown.title }}</span>
+        <span class="cd-banner-date">{{ nextCountdown.date }}</span>
+      </div>
+      <div class="cd-banner-days">
+        <template v-if="nextCountdown.days > 0">
+          <span class="cd-banner-label">还有</span>
+          <span class="cd-banner-num">{{ nextCountdown.days }}</span>
+          <span class="cd-banner-label">天</span>
+        </template>
+        <span v-else class="cd-banner-num">就是今天！</span>
+      </div>
+    </router-link>
 
     <section class="dash-section card">
       <h2 class="section-title">快速入口</h2>
@@ -281,6 +324,76 @@ onMounted(() => {
 
 .dash-section {
   padding: var(--space-5);
+}
+
+/* ── 倒数日横幅 ── */
+.cd-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-6);
+  color: var(--text-primary);
+  transition: transform var(--duration-fast) var(--ease-out),
+              border-color var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.cd-banner:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-md);
+}
+
+.cd-banner.today {
+  border-color: var(--accent);
+  background: var(--accent-muted);
+}
+
+.cd-banner-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.cd-banner-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cd-banner-title {
+  font-size: var(--text-base);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cd-banner-date {
+  font-family: var(--font-data);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.cd-banner-days {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+
+.cd-banner-num {
+  font-family: var(--font-data);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.cd-banner-label {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
 }
 
 .dash-section .section-title {

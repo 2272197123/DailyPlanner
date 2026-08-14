@@ -5,7 +5,8 @@ const props = defineProps({
   date: { type: String, required: true },
   mood: { type: Object, default: null },
   size: { type: Number, default: 14 },
-  gap: { type: Number, default: 3 }
+  gap: { type: Number, default: 3 },
+  isToday: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['click'])
@@ -30,8 +31,9 @@ function onClick(event) {
 <template>
   <div
     class="mood-cell"
+    :class="{ 'is-today': isToday }"
     :style="{ width: `${size}px`, height: `${size}px`, borderRadius: `${size / 4}px`, ...bgStyle }"
-    :title="tooltip"
+    :title="isToday ? '今天 · ' + tooltip : tooltip"
     @click="onClick"
   ></div>
 </template>
@@ -48,5 +50,16 @@ function onClick(event) {
   transform: scale(1.5);
   box-shadow: 0 0 0 2px var(--accent-muted);
   z-index: 1;
+}
+
+/* 今天：呼吸光环，一眼定位 */
+.mood-cell.is-today {
+  box-shadow: 0 0 0 2px var(--accent);
+  animation: today-halo 2s ease-in-out infinite;
+}
+
+@keyframes today-halo {
+  0%, 100% { box-shadow: 0 0 0 2px var(--accent); }
+  50% { box-shadow: 0 0 0 4px var(--accent-muted); }
 }
 </style>

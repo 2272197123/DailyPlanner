@@ -1,6 +1,8 @@
 <script setup>
 import { ref } from 'vue'
 import MoodGrid from '@/components/mood/MoodGrid.vue'
+import MoodToday from '@/components/mood/MoodToday.vue'
+import { MOOD_PRESETS } from '@/stores/mood'
 
 const currentYear = ref(new Date().getFullYear())
 
@@ -27,6 +29,8 @@ const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 +
       </div>
     </header>
 
+    <MoodToday />
+
     <section class="mood-section card">
       <MoodGrid :year="currentYear" />
     </section>
@@ -38,25 +42,9 @@ const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 +
           <span class="legend-dot" style="background-color: var(--bg-muted)"></span>
           <span class="legend-label">无记录</span>
         </div>
-        <div class="legend-item">
-          <span class="legend-dot" style="background-color: var(--mood-joy)"></span>
-          <span class="legend-label">开心</span>
-        </div>
-        <div class="legend-item">
-          <span class="legend-dot" style="background-color: var(--mood-calm)"></span>
-          <span class="legend-label">平静</span>
-        </div>
-        <div class="legend-item">
-          <span class="legend-dot" style="background-color: var(--mood-productive)"></span>
-          <span class="legend-label">充实</span>
-        </div>
-        <div class="legend-item">
-          <span class="legend-dot" style="background-color: var(--mood-tired)"></span>
-          <span class="legend-label">疲惫</span>
-        </div>
-        <div class="legend-item">
-          <span class="legend-dot" style="background-color: var(--mood-anxious)"></span>
-          <span class="legend-label">焦虑</span>
+        <div v-for="p in MOOD_PRESETS" :key="p.id" class="legend-item">
+          <span class="legend-dot" :style="{ backgroundColor: p.color }"></span>
+          <span class="legend-label">{{ p.label }}</span>
         </div>
       </div>
     </section>

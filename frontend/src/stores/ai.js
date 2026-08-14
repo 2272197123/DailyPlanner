@@ -203,17 +203,8 @@ export const useAiStore = defineStore('ai', {
     async _callAi(text, context) {
       const cfg = this._getApiConfig()
       if (!cfg || !cfg.apiKey) {
-        // Try server fallback
-        try {
-          const scheduleStore = useScheduleStore()
-          const { data } = await api.post('/generate-plan', {
-            date: scheduleStore.currentDate,
-            dayMode: scheduleStore.mode,
-            feedback: text
-          })
-          const reply = this._handlePlanResponse(data)
-          if (reply) return reply
-        } catch { /* fall through to error */ }
+        // v13：服务端 /generate-plan 兜底已随 AI 计划生成一同下线（后端端点保留注释）。
+        // 后续升级恢复时，此处应重新调用 api.post('/generate-plan', {...}) 并用 _handlePlanResponse 处理回包。
         return null
       }
 
@@ -247,17 +238,7 @@ export const useAiStore = defineStore('ai', {
       })
 
       if (!resp.ok) {
-        // Fallback to server
-        try {
-          const scheduleStore = useScheduleStore()
-          const { data } = await api.post('/generate-plan', {
-            date: scheduleStore.currentDate,
-            dayMode: scheduleStore.mode,
-            feedback: text
-          })
-          const reply = this._handlePlanResponse(data)
-          if (reply) return reply
-        } catch { /* fall through */ }
+        // v13：服务端 /generate-plan 兜底已下线（同上注释）
         return null
       }
 
