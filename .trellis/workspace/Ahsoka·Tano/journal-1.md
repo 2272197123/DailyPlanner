@@ -341,3 +341,22 @@ Root-caused the mood picker glitch: MoodPicker's root is `position: fixed` but w
 ### Status
 
 [OK] **Completed**
+
+
+## Session 11: 许愿瓶修正：圆柱瓶形 + 混合色单液面
+
+**Date**: 2026-08-15
+**Task**: 许愿瓶修正：圆柱瓶形 + 混合色单液面
+**Branch**: `master`
+
+### Summary
+
+按用户反馈修正 WishingBottle.vue（单文件重写）：(1) 分层液体→单团混合色液体，颜色=mixColors(vents)与后端_blend_colors/页面dayColor严格一致（红+蓝=#bc00bc实测），波浪只在顶部液面，层间波浪/泡沫线全删；(2) 圆肚瓶→圆柱玻璃瓶（直壁+微圆底角+短颈+锥形软木塞+麻绳蝴蝶结+竖向高光+塔罗刻印）；液位15%起每条+12%上限88%，stop-color 0.6s渐变过渡换色，气泡上浮距离随液深缩放；接口零变化（props/clipPath/playPour落点跟随液面/mini静态/reduced-motion）。已部署生产（bundle Cfzj…）front 200；未提交git。注意：多色混合偏灰粉是线性空间平均的固有结果，全站口径一致；若用户嫌灰可评估换OKLab/保饱和度混合（需前后端同步改）。
+
+### Git Commits
+
+(No commits - planning session)
+
+### Status
+
+[OK] **Completed**
