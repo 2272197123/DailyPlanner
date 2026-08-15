@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "项目质量约束（含零硬编码、兼容性等通用约定），实施前确认适用条目"}
+{"file": ".trellis/tasks/08-15-plan-interaction-and-mood-tarot/prd.md", "reason": "父任务跨子任务验收标准：chrome80 兼容、Teleport body、主题/暗色、不提交 git 等约束"}
