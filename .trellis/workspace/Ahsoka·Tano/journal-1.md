@@ -303,3 +303,22 @@ Root-caused the mood picker glitch: MoodPicker's root is `position: fixed` but w
 
 - fixed 定位组件（弹窗/浮层）一律 Teleport to body——backdrop-filter/transform/overflow 祖先都会截断，已在代码注释中标注
 - 此前遗留：PostgreSQLDB 无重连机制；服务器 .bak-* 备份可定期清理；Session 3-8 改动均未提交 git
+
+
+## Session 9: 计划块自由拖拽+星轨轮盘时间设置；心情页药剂瓶混合色重做
+
+**Date**: 2026-08-15
+**Task**: 计划块自由拖拽+星轨轮盘时间设置；心情页药剂瓶混合色重做
+**Branch**: `master`
+
+### Summary
+
+子任务1(plan-drag-time-picker)：弃用HTML5 DnD改用Pointer Events自实现拖拽(useDragSort.js，鼠标6px阈值/触屏长按280ms激活防滚动劫持)，悬浮副本+插入指示线Teleport body；落点语义resolveDrop(流动落间隙=重排/落钉时块=钉住顺延，钉时拖动=改时间，5min取整)，moveBlockToDate跨日移动；新增StarDial星轨轮盘(翻面+拖针+5min吸附+星尘)/StarStrip星图拖杆(磁吸避让)/StarDateBar星历横条(惯性+月相装饰)；TaskCard时间为主标题排版，点击时间翻面设置；新建modal弃用原生type=time。子任务2(mood-potion-tarot)：新表mood_vents(三套方言schema+init_mysql.sql)，一天多条吐槽各带自由色(连续光谱SpectrumPicker无预设色板)，当日颜色=线性sRGB混合(后端_blend_colors与前端mixColors逐位一致)，save_mood有vents时忽略color；许愿瓶WishingBottle(液层叠色/波浪/气泡/倒入弹簧晃动粒子)；MoodView四tab(当日/近7天/近一月/年历)，年历多vent日多色渐变；StarPendant钟摆物理+CurtainReveal丝绒帘开幕+MoodToday点击特效+环境星尘，统一prefers-reduced-motion关停。检查轮修复8处(触屏滚动劫持/分针scale覆盖rotate/翻面完成不应用时间/24:00越界/rAF泄漏/PG moods冲突键缺失/store回滚色错置/删空口径分叉)。spec更新：database-guidelines(PG _pg_sql冲突键需注册新表/NOW翻译/mood表) + quality-guidelines(Vue3前端约束：chrome80/Teleport/Pointer拖拽/动画卫生)。已部署生产(docker compose rebuild)并线上验证ALL PASS(混合色/CRUD/422/年视图)；按用户要求未提交git。
+
+### Git Commits
+
+(No commits - planning session)
+
+### Status
+
+[OK] **Completed**
