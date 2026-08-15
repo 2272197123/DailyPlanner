@@ -360,3 +360,22 @@ Root-caused the mood picker glitch: MoodPicker's root is `position: fixed` but w
 ### Status
 
 [OK] **Completed**
+
+
+## Session 12: 时间轴全局顺序语义修正 + 心情页打磨（渐变瓶/主题帘/AI接入吐槽）
+
+**Date**: 2026-08-16
+**Task**: 时间轴全局顺序语义修正 + 心情页打磨（渐变瓶/主题帘/AI接入吐槽）
+**Branch**: `master`
+
+### Summary
+
+时间轴：复现确认用户感知bug的真因是resolveDrop间隙落点在流动-only列表里indexOf=-1导致被拖块追加到末尾整体重排（钉时块本身从未被改）；改为全局顺序模型orderCfg v2（钉时+流动同列，钉时id为锚点，流动按全局序填空档、溢出顺延到钉时后、钉时不可变铁律），间隙插入精确落位；检查轮修3处：轮盘/编辑面板钉住不移除order致锚点误推(updateBlock跃迁检测)、旧order含钉时id需fetchDay迁移+持久化v:2标记、getComputedTimeline跨日起点取错；另修StarDateBar提前setPointerCapture致日期格click失效（推迟到拖拽阈值后）。心情：MoodToday预设卡删除；瓶内液体改月历同款多色渐变（明亮不灰，mixColors仅留dayColor单色场景）；SpectrumPicker去亮度滑条固定L=60；CurtainReveal全主题变量化（9主题×亮暗验证）；archive.js _requestAiReview注入当日吐槽（文本+色相偏暖/偏冷倾向）与非默认心情label。spec新增：时间轴order v2契约+钉时不可变铁律。已部署生产（bundle D-VEBxvQ与本地一致，API 200）；未提交git。
+
+### Git Commits
+
+(No commits - planning session)
+
+### Status
+
+[OK] **Completed**
