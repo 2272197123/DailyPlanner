@@ -322,3 +322,22 @@ Root-caused the mood picker glitch: MoodPicker's root is `position: fixed` but w
 ### Status
 
 [OK] **Completed**
+
+
+## Session 10: 移动端性能优化（保持设计不变）+ 许愿瓶重绘
+
+**Date**: 2026-08-15
+**Task**: 移动端性能优化（保持设计不变）+ 许愿瓶重绘
+**Branch**: `master`
+
+### Summary
+
+性能：移动端(<=768px)去除常驻大面积backdrop-filter(侧栏20px/头部12px/glass卡片/flow-header/背景遮罩)改用--glass-bg-solid实色(亮rgba(255,255,255,.94)/暗rgba(24,25,33,.94))；StarPendant光晕移出rAF旋转元素(检查轮改为.sp-swing::before跟随摆动，避免拖拽时光晕脱离)且document.hidden停rAF；MoodView环境星尘桌面24/移动8+页面隐藏暂停+仅当日tab挂载；WishingBottle移动端仅顶层波浪+每层1气泡；FlowTimeline环境背景过渡移动端1.2s→0.3s。瓶重绘：细颈圆肚瓶形+锥形软木塞+麻绳蝴蝶结+双弧高光+塔罗刻印+per-layer垂直渐变与泡沫线；顺带修复原版waveD几何bug(每层path通到瓶底导致最后一层盖住全部多层不显示)；uid计数移到模块级script块防多实例clipId冲突。spec新增：移动端禁常驻backdrop-filter/rAF元素不挂filter/SVG per-instance id模块级计数/裁剪层path只覆盖自己区间。已部署生产验证(新bundle+glass-bg-solid在css+API 200)；未提交git(用户自理)。
+
+### Git Commits
+
+(No commits - planning session)
+
+### Status
+
+[OK] **Completed**
