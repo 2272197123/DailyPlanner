@@ -1,0 +1,29 @@
+{
+  "id": "plan-interaction-and-mood-tarot",
+  "name": "plan-interaction-and-mood-tarot",
+  "title": "计划块交互重做（自由拖拽+钉时/流动互转+时间选择器+块排版）与心情页塔罗化（药剂瓶多日吐槽混合色+近期视图+粒子动效）",
+  "description": "",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "Ahsoka·Tano",
+  "assignee": "Ahsoka·Tano",
+  "createdAt": "2026-08-15",
+  "completedAt": "2026-08-15",
+  "branch": null,
+  "base_branch": "master",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "08-15-plan-drag-time-picker",
+    "08-15-mood-potion-tarot"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
