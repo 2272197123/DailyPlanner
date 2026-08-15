@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from server import config, mailer
 from server.crypto import encrypt_secret, decrypt_secret
 from server.models import (
-    MoodEntry, LedgerEntry,
+    MoodEntry, VentEntry, LedgerEntry,
     UserCreate, UserLogin, AuthResponse, TokenRefresh, AdminResetPassword,
     SendEmailCode, ProfileUpdate,
     # v13: AI 计划生成已下线（端点见下方注释块），模型保留以便后续升级
@@ -24,7 +24,7 @@ from server.models import (
 from server.db import (
     init_db, get_plan, save_plan, delete_plan, list_plans,
     get_progress, save_progress,
-    get_mood, save_mood, delete_mood, list_moods,
+    get_mood, save_mood, delete_mood, list_moods, add_vent, delete_vent,
     get_ledger, list_ledger, create_ledger, update_ledger, delete_ledger,
     get_routine_done, set_routine_done,
     get_balance, set_balance,
@@ -487,6 +487,33 @@ async def api_delete_mood(date: str, user: dict = Depends(require_user)):
     if not deleted:
         raise HTTPException(404, "无此心情记录")
     return {"ok": True, "message": "已删除"}
+
+
+# ── 心情吐槽（多条/天，颜色混合） ──
+
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+VENT_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+@app.post("/api/mood/{date}/vents")
+async def api_add_vent(date: str, body: VentEntry, user: dict = Depends(require_user)):
+    if not DATE_RE.match(date):
+        raise HTTPException(422, "日期格式应为 YYYY-MM-DD")
+    text = (body.text or "").strip()
+    if not text:
+        raise HTTPException(422, "吐槽内容不能为空")
+    if len(text) > 500:
+        raise HTTPException(422, "吐槽内容不能超过 500 字")
+    if not VENT_COLOR_RE.match(body.color or ""):
+        raise HTTPException(422, "颜色格式应为 #rrggbb")
+    vent_id = add_vent(user["user_id"], date, text, body.color.lower())
+    return {"ok": True, "id": vent_id, "message": "已倒入许愿瓶"}
+
+
+@app.delete("/api/mood/vents/{vent_id}")
+async def api_delete_vent(vent_id: int, user: dict = Depends(require_user)):
+    deleted = delete_vent(user["user_id"], vent_id)
+    return {"ok": True, "deleted": deleted}
 
 
 # ═══════════════════════════════════════

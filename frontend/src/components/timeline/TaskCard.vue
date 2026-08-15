@@ -1,9 +1,13 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
+import anime from 'animejs'
 import { useScheduleStore } from '@/stores/schedule'
 import { useToastStore } from '@/stores/toast'
 import { escapeHtml, fmtDuration, calcTaskReward } from '@/utils/format'
 import { CAT_EMOJI, PRI_LABELS } from '@/utils/constants'
+import StarDial from '@/components/plan/StarDial.vue'
+import StarStrip from '@/components/plan/StarStrip.vue'
+import StarDateBar from '@/components/plan/StarDateBar.vue'
 
 const props = defineProps({
   block: Object,
@@ -68,8 +72,10 @@ const editForm = ref({
   duration: 30,
   category: 'study',
   priority: 'medium',
-  note: ''
+  note: '',
+  time: ''
 })
+const editDate = ref('')
 
 /* ── 子任务折叠（默认收起，标题行显示进度）── */
 const subsExpanded = ref(false)
@@ -97,21 +103,116 @@ const subGradient = computed(() => {
   return 'var(--text-muted)'
 })
 
+/* ═══ 星轨翻面：点击时间区域 → 卡片 3D 翻面设置时间 ═══ */
+const flipped = ref(false)
+const flipRef = ref(null)
+const dialTime = ref('09:00')
+let dialDirty = false // 用户真正拖过轮盘/拖杆才把 ✓完成 视为「应用时间」
+let flipping = false
+
+/* 当日其他钉时块区间（星图拖杆磁吸避让用） */
+const otherPinned = computed(() =>
+  scheduleStore.getComputedTimeline(scheduleStore.currentDate)
+    .filter(b => b.id !== props.block.id && b.time)
+    .map(b => ({ start: b._startMin, end: b._endMin }))
+)
+
+function flipTo(showBack) {
+  if (flipping) return
+  flipping = true
+  const el = flipRef.value
+  if (!el) {
+    flipped.value = showBack
+    flipping = false
+    return
+  }
+  anime({
+    targets: el,
+    rotateY: [0, 90],
+    duration: 200,
+    easing: 'easeInQuad',
+    complete: () => {
+      flipped.value = showBack
+      nextTick(() => {
+        anime({
+          targets: el,
+          rotateY: [-90, 0],
+          duration: 260,
+          easing: 'easeOutQuad',
+          complete: () => {
+            el.style.transform = '' // 清掉残留 transform，避免成为 fixed 后代包含块
+            flipping = false
+          }
+        })
+      })
+    }
+  })
+}
+
+function openFlip(e) {
+  if (e) e.stopPropagation()
+  if (flipped.value) return
+  dialTime.value = props.block.time || props.block._startStr || '09:00'
+  dialDirty = false
+  flipTo(true)
+}
+
+function closeFlip() {
+  if (!flipped.value) return
+  flipTo(false)
+}
+
+/* ✓ 完成：拖过轮盘/拖杆则应用新时间（钉住或改时），否则仅翻面返回 */
+function confirmFlip() {
+  if (dialDirty && dialTime.value && dialTime.value !== (props.block.time || '')) {
+    scheduleStore.updateBlock(scheduleStore.currentDate, props.block.id, { time: dialTime.value })
+    toastStore.ok('已钉住 ' + dialTime.value)
+  }
+  closeFlip()
+}
+
+function pinTime() {
+  scheduleStore.updateBlock(scheduleStore.currentDate, props.block.id, { time: dialTime.value })
+  toastStore.ok('已钉住 ' + dialTime.value)
+  closeFlip()
+}
+
+function unpinTime() {
+  scheduleStore.updateBlock(scheduleStore.currentDate, props.block.id, { time: '' })
+  toastStore.ok('已转为流动')
+  closeFlip()
+}
+
+/* ── 编辑面板 ── */
 function openEdit() {
   editForm.value = {
     subject: props.block.subject || '',
     duration: props.block.duration || 30,
     category: props.block.category || 'study',
     priority: props.block.priority || 'medium',
-    note: props.block.note || ''
+    note: props.block.note || '',
+    time: props.block.time || ''
   }
+  editDate.value = scheduleStore.currentDate
   editing.value = true
 }
 
+function clearEditTime() {
+  editForm.value.time = ''
+}
+
 function saveEdit() {
-  scheduleStore.updateBlock(scheduleStore.currentDate, props.block.id, editForm.value)
+  const cur = scheduleStore.currentDate
+  const target = editDate.value || cur
+  scheduleStore.updateBlock(cur, props.block.id, { ...editForm.value })
+  if (target !== cur) {
+    /* 换日期 = 把块移动到另一天（两边持久化） */
+    scheduleStore.moveBlockToDate(cur, target, props.block.id)
+    toastStore.ok('已移到 ' + target)
+  } else {
+    toastStore.ok('已保存')
+  }
   editing.value = false
-  toastStore.ok('已保存')
 }
 
 function handleDelete() {
@@ -137,103 +238,137 @@ function handleDelete() {
       <div class="ctp-dot" :class="{ pulsing: !block.completed }"></div>
     </div>
 
-    <!-- Card body（整卡点击切换完成；内部交互区均已 @click.stop） -->
-    <div class="card-body" @click="emit('toggle', block.id, $event)">
-      <!-- Header row -->
-      <div class="card-header">
-        <span class="card-icon">{{ catEmoji }}</span>
-        <span class="card-title">{{ block.subject || '(未命名)' }}</span>
-        <span class="card-duration">{{ durationFmt }}</span>
-
-        <!-- XP badge -->
-        <span class="card-xp" v-if="!block.completed">+{{ xpReward }} XP</span>
-        <span class="card-xp done" v-else>✓ 已获得</span>
-
-        <div class="card-actions">
-          <button class="ca-btn" @click.stop="openEdit" title="编辑">✎</button>
-          <button class="ca-btn ca-del" @click.stop="handleDelete" title="删除">✕</button>
-        </div>
-      </div>
-
-      <!-- Tags row -->
-      <div class="card-tags" v-if="block.category || block.priority || block.goalId">
-        <span class="ct-tag ct-cat">{{ catEmoji }} {{ block.category || 'other' }}</span>
-        <span class="ct-tag ct-pri" v-if="priLabel">{{ priLabel }}</span>
-        <span class="ct-tag ct-goal" v-if="block.goalId">{{ block.phase || '目标' }}</span>
-      </div>
-
-      <!-- Note -->
-      <div class="card-note" v-if="block.note">{{ block.note }}</div>
-
-      <!-- Subtasks: 折叠头部（进度条 + n/m）+ 可展开列表 -->
-      <div class="card-subtasks-head" v-if="subCount > 0" @click.stop="toggleSubs">
-        <div class="cp-bar">
-          <div class="cp-fill" :style="{ width: subPct + '%', background: subGradient }"></div>
-        </div>
-        <span class="cp-text">{{ doneCount }}/{{ subCount }}</span>
-        <span class="cst-chevron" :class="{ open: subsExpanded }">▸</span>
-      </div>
-      <div class="card-subtasks" v-if="subCount > 0 && subsExpanded">
-        <div
-          v-for="(st, si) in block.subtasks"
-          :key="'st-' + si"
-          class="cst-item"
-          :class="{ done: st.done }"
-          @click.stop="emit('toggleSubtask', si, $event)"
-        >
-          <span class="cst-check" :class="{ checked: st.done }">
-            <span v-if="st.done">✓</span>
+    <!-- 翻面容器（rotateY 90° 中缝换面，避免双面 absolute 高度同步问题） -->
+    <div class="tc-flip" ref="flipRef">
+      <!-- Card body（整卡点击切换完成；内部交互区均已 @click.stop） -->
+      <div v-if="!flipped" class="card-body" @click="emit('toggle', block.id, $event)">
+        <!-- 时间主标题：大号等宽，点击进入星轨轮盘 -->
+        <div class="card-time-head" @click.stop="openFlip" title="点击设置时间">
+          <span class="cth-time">
+            {{ block._startStr || '--:--' }}<span class="cth-sep">–</span>{{ block._endStr || '--:--' }}
           </span>
-          <span class="cst-text">{{ st.text }}</span>
+          <span class="cth-badge" :class="{ pinned: !!block.time }">{{ block.time ? '📌 钉时' : '🌊 流动' }}</span>
+        </div>
+
+        <!-- Header row -->
+        <div class="card-header">
+          <span class="card-icon">{{ catEmoji }}</span>
+          <span class="card-title">{{ block.subject || '(未命名)' }}</span>
+          <span class="card-duration">{{ durationFmt }}</span>
+
+          <!-- XP badge -->
+          <span class="card-xp" v-if="!block.completed">+{{ xpReward }} XP</span>
+          <span class="card-xp done" v-else>✓ 已获得</span>
+
+          <div class="card-actions">
+            <button class="ca-btn" @click.stop="openEdit" title="编辑">✎</button>
+            <button class="ca-btn ca-del" @click.stop="handleDelete" title="删除">✕</button>
+          </div>
+        </div>
+
+        <!-- Tags row -->
+        <div class="card-tags" v-if="block.category || block.priority || block.goalId">
+          <span class="ct-tag ct-cat">{{ catEmoji }} {{ block.category || 'other' }}</span>
+          <span class="ct-tag ct-pri" v-if="priLabel">{{ priLabel }}</span>
+          <span class="ct-tag ct-goal" v-if="block.goalId">{{ block.phase || '目标' }}</span>
+        </div>
+
+        <!-- Note -->
+        <div class="card-note" v-if="block.note">{{ block.note }}</div>
+
+        <!-- Subtasks: 折叠头部（进度条 + n/m）+ 可展开列表 -->
+        <div class="card-subtasks-head" v-if="subCount > 0" @click.stop="toggleSubs">
+          <div class="cp-bar">
+            <div class="cp-fill" :style="{ width: subPct + '%', background: subGradient }"></div>
+          </div>
+          <span class="cp-text">{{ doneCount }}/{{ subCount }}</span>
+          <span class="cst-chevron" :class="{ open: subsExpanded }">▸</span>
+        </div>
+        <div class="card-subtasks" v-if="subCount > 0 && subsExpanded">
+          <div
+            v-for="(st, si) in block.subtasks"
+            :key="'st-' + si"
+            class="cst-item"
+            :class="{ done: st.done }"
+            @click.stop="emit('toggleSubtask', si, $event)"
+          >
+            <span class="cst-check" :class="{ checked: st.done }">
+              <span v-if="st.done">✓</span>
+            </span>
+            <span class="cst-text">{{ st.text }}</span>
+          </div>
+        </div>
+
+        <!-- Inline timer -->
+        <div class="card-timer" @click.stop>
+          <div class="ctimer-bar" v-if="timerRunning || timerSec > 0">
+            <div class="ctimer-fill" :style="{ width: Math.min(timerRatio * 100, 100) + '%', background: timerColor }"></div>
+          </div>
+          <span class="ctimer-display" :class="{ running: timerRunning }">{{ fmtTimer(timerSec) }}</span>
+          <div class="ctimer-btns">
+            <button class="ctimer-btn" :class="timerRunning ? 'pause' : 'play'" @click="toggleTimer">
+              {{ timerRunning ? '⏸' : '▶' }}
+            </button>
+            <button v-if="timerSec > 0" class="ctimer-btn reset" @click="resetTimer" title="重置">↺</button>
+          </div>
         </div>
       </div>
 
-      <!-- Inline timer -->
-      <div class="card-timer" @click.stop>
-        <div class="ctimer-bar" v-if="timerRunning || timerSec > 0">
-          <div class="ctimer-fill" :style="{ width: Math.min(timerRatio * 100, 100) + '%', background: timerColor }"></div>
+      <!-- 背面：星轨轮盘 + 星图拖杆（点击不切换完成） -->
+      <div v-else class="card-body tc-back" @click.stop>
+        <div class="tcb-head">
+          <span class="tcb-title">✦ 星轨定时</span>
+          <button class="ca-btn" @click="closeFlip" title="返回">✕</button>
         </div>
-        <span class="ctimer-display" :class="{ running: timerRunning }">{{ fmtTimer(timerSec) }}</span>
-        <div class="ctimer-btns">
-          <button class="ctimer-btn" :class="timerRunning ? 'pause' : 'play'" @click="toggleTimer">
-            {{ timerRunning ? '⏸' : '▶' }}
-          </button>
-          <button v-if="timerSec > 0" class="ctimer-btn reset" @click="resetTimer" title="重置">↺</button>
-        </div>
+        <StarDial v-model="dialTime" @update:model-value="dialDirty = true" @pin="pinTime" @unpin="unpinTime" @confirm="confirmFlip" />
+        <StarStrip v-model="dialTime" :pinned="otherPinned" @update:model-value="dialDirty = true" />
       </div>
     </div>
 
-    <!-- Inline edit overlay -->
-    <div v-if="editing" class="card-edit-overlay" @click.self="editing = false">
-      <div class="edit-panel">
-        <h4>编辑任务</h4>
-        <label>标题</label>
-        <input v-model="editForm.subject" class="ep-input" />
-        <label>时长 (分钟)</label>
-        <input v-model.number="editForm.duration" type="number" class="ep-input" />
-        <label>分类</label>
-        <select v-model="editForm.category" class="ep-input">
-          <option value="study">📚 学习</option>
-          <option value="work">💼 工作</option>
-          <option value="life">🏠 生活</option>
-          <option value="health">💪 健康</option>
-          <option value="review">📝 复盘</option>
-          <option value="other">📌 其他</option>
-        </select>
-        <label>优先级</label>
-        <select v-model="editForm.priority" class="ep-input">
-          <option value="high">🔴 高</option>
-          <option value="medium">🟡 中</option>
-          <option value="low">🟢 低</option>
-        </select>
-        <label>备注</label>
-        <input v-model="editForm.note" class="ep-input" />
-        <div class="ep-actions">
-          <button class="btn-primary" @click="saveEdit">💾 保存</button>
-          <button class="btn-secondary" @click="editing = false">取消</button>
+    <!-- Inline edit overlay（fixed 元素 → Teleport body，避免被翻面 transform 截断） -->
+    <Teleport to="body">
+      <div v-if="editing" class="card-edit-overlay" @click.self="editing = false">
+        <div class="edit-panel">
+          <h4>编辑任务</h4>
+          <label>标题</label>
+          <input v-model="editForm.subject" class="ep-input" />
+          <label>时长 (分钟)</label>
+          <input v-model.number="editForm.duration" type="number" class="ep-input" />
+
+          <label>日期（可移到另一天）</label>
+          <StarDateBar v-model="editDate" />
+
+          <label>开始时间 <span class="ep-hint">{{ editForm.time ? '📌 ' + editForm.time : '🌊 流动（顺排）' }}</span></label>
+          <StarDial v-model="editForm.time" :show-actions="false" />
+          <StarStrip v-model="editForm.time" :pinned="otherPinned" />
+          <div class="ep-time-actions">
+            <button v-if="editForm.time" class="btn-secondary" @click="clearEditTime">🌊 转为流动（清除时间）</button>
+          </div>
+
+          <label>分类</label>
+          <select v-model="editForm.category" class="ep-input">
+            <option value="study">📚 学习</option>
+            <option value="work">💼 工作</option>
+            <option value="life">🏠 生活</option>
+            <option value="health">💪 健康</option>
+            <option value="review">📝 复盘</option>
+            <option value="other">📌 其他</option>
+          </select>
+          <label>优先级</label>
+          <select v-model="editForm.priority" class="ep-input">
+            <option value="high">🔴 高</option>
+            <option value="medium">🟡 中</option>
+            <option value="low">🟢 低</option>
+          </select>
+          <label>备注</label>
+          <input v-model="editForm.note" class="ep-input" />
+          <div class="ep-actions">
+            <button class="btn-primary" @click="saveEdit">💾 保存</button>
+            <button class="btn-secondary" @click="editing = false">取消</button>
+          </div>
         </div>
       </div>
-    </div>
+    </Teleport>
   </div>
 </template>
 
@@ -291,9 +426,18 @@ function handleDelete() {
 .state-past .ctp-dot { background: var(--state-past); }
 .state-future .ctp-dot { background: var(--state-future); }
 
+/* ── 翻面容器 ── */
+.tc-flip {
+  flex: 1;
+  min-width: 0;
+  perspective: 900px;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
 /* ── Card body ── */
 .card-body {
-  flex: 1;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -317,6 +461,69 @@ function handleDelete() {
   color: var(--text-muted);
 }
 
+/* ── 时间主标题（大号等宽 + 钉时/流动徽章） ── */
+.card-time-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: calc(var(--space-2) * -1) calc(var(--space-2) * -1) var(--space-1);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.card-time-head:hover {
+  background: var(--accent-muted);
+}
+
+.cth-time {
+  font-family: var(--font-data);
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+
+.cth-sep {
+  margin: 0 2px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.cth-badge {
+  font-size: 10px;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--bg-muted);
+  color: var(--text-muted);
+}
+
+.cth-badge.pinned {
+  background: var(--accent-muted);
+  color: var(--accent);
+}
+
+/* ── 背面 ── */
+.tc-back {
+  cursor: default;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.tcb-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tcb-title {
+  font-family: var(--font-heading);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--accent);
+}
+
 /* ── Header ── */
 .card-header {
   display: flex;
@@ -324,13 +531,13 @@ function handleDelete() {
   gap: var(--space-2);
 }
 
-.card-icon { font-size: var(--text-lg); }
+.card-icon { font-size: var(--text-base); }
 
 .card-title {
   flex: 1;
   min-width: 0;
-  font-size: var(--text-sm);
-  font-weight: 600;
+  font-size: var(--text-lg);
+  font-weight: 700;
   color: var(--text-primary);
   transition: color var(--duration-fast) var(--ease-out);
 }
@@ -517,6 +724,7 @@ function handleDelete() {
   inset: 0;
   background: rgba(0, 0, 0, 0.25);
   backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -529,6 +737,8 @@ function handleDelete() {
   padding: var(--space-6);
   width: 90%;
   max-width: 400px;
+  max-height: 90vh;
+  overflow-y: auto;
   box-shadow: var(--shadow-lg);
 }
 
@@ -542,6 +752,18 @@ function handleDelete() {
   font-size: var(--text-xs);
   color: var(--text-secondary);
   margin: var(--space-3) 0 var(--space-1);
+}
+
+.ep-hint {
+  margin-left: var(--space-2);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.ep-time-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--space-2);
 }
 
 .ep-input {

@@ -12,6 +12,8 @@ import CountdownPanel from '@/components/plan/CountdownPanel.vue'
 import DailyReview from '@/components/plan/DailyReview.vue'
 import ImportPlanModal from '@/components/plan/ImportPlanModal.vue'
 import CardFlyIn from '@/components/plan/CardFlyIn.vue'
+import StarDial from '@/components/plan/StarDial.vue'
+import StarDateBar from '@/components/plan/StarDateBar.vue'
 import { CAT_EMOJI } from '@/utils/constants'
 
 const route = useRoute()
@@ -65,7 +67,13 @@ const showAddModal = ref(false)
 const showRulesModal = ref(false)
 const showImportModal = ref(false)
 const flyInRef = ref(null)
-const newTask = ref({ subject: '', duration: 30, priority: 'medium', time: '' })
+const newTask = ref({ subject: '', duration: 30, priority: 'medium', time: '', date: '' })
+
+/* 打开新建 modal：日期默认当前查看日 */
+function openAdd() {
+  newTask.value.date = scheduleStore.currentDate
+  showAddModal.value = true
+}
 
 /* 新卡片落入时间轴后，播放「贴上时间轴」动效 */
 function playFlyIn(id, subject, emoji) {
@@ -78,14 +86,19 @@ function playFlyIn(id, subject, emoji) {
   }, 60)
 }
 
-function handleAdd() {
+async function handleAdd() {
   const subject = newTask.value.subject.trim()
   if (!subject) {
     toastStore.warn('请填写任务名')
     return
   }
+  const date = newTask.value.date || scheduleStore.currentDate
+  /* 目标日计划未加载时先拉取，避免覆盖服务端已有计划 */
+  if (!scheduleStore.schedules[date]) {
+    await scheduleStore.fetchDay(date)
+  }
   const id = 'blk_' + Date.now()
-  scheduleStore.addBlock(scheduleStore.currentDate, {
+  scheduleStore.addBlock(date, {
     id,
     subject,
     duration: Number(newTask.value.duration) || 30,
@@ -96,8 +109,13 @@ function handleAdd() {
     completed: false
   })
   showAddModal.value = false
-  newTask.value = { subject: '', duration: 30, priority: 'medium', time: '' }
-  playFlyIn(id, subject, CAT_EMOJI.study)
+  newTask.value = { subject: '', duration: 30, priority: 'medium', time: '', date: scheduleStore.currentDate }
+  if (date === scheduleStore.currentDate) {
+    playFlyIn(id, subject, CAT_EMOJI.study)
+  } else {
+    /* 加到非当前日：目标不在时间轴上，跳过飞入动效 */
+    toastStore.ok('已添加到 ' + fmtDate(date))
+  }
 }
 
 /* ── 导入前一天计划（用户勾选取舍）── */
@@ -137,7 +155,7 @@ function handleImport(selected) {
 
       <div class="ph-bar">
         <div class="ph-actions">
-          <button class="btn btn-primary btn-sm" @click="showAddModal = true">＋ 新任务</button>
+          <button class="btn btn-primary btn-sm" @click="openAdd">＋ 新任务</button>
           <button class="btn btn-secondary btn-sm" @click="showImportModal = true">⏮ 导入前一天</button>
           <button class="btn btn-secondary btn-sm" @click="showRulesModal = true">🗓 固定日程</button>
         </div>
@@ -152,7 +170,7 @@ function handleImport(selected) {
       <div class="plan-main">
         <!-- 纵向时间轴（v13） -->
         <FlowTimeline
-          @add="showAddModal = true"
+          @add="openAdd"
           @rules="showRulesModal = true"
           @import="showImportModal = true"
         />
@@ -197,8 +215,24 @@ function handleImport(selected) {
           />
           <label class="mf-label">时长（分钟）</label>
           <input v-model.number="newTask.duration" class="mf-input" type="number" min="5" step="5" />
-          <label class="mf-label">开始时间（可选，留空则按顺序顺排）</label>
-          <input v-model="newTask.time" class="mf-input" type="time" />
+          <label class="mf-label">日期</label>
+          <StarDateBar v-model="newTask.date" />
+          <label class="mf-label">开始时间</label>
+          <div class="mf-time-toggle">
+            <button
+              type="button"
+              class="mf-time-btn"
+              :class="{ on: !newTask.time }"
+              @click="newTask.time = ''"
+            >🌊 流动顺排</button>
+            <button
+              type="button"
+              class="mf-time-btn"
+              :class="{ on: !!newTask.time }"
+              @click="newTask.time = newTask.time || '09:00'"
+            >📌 钉住时间</button>
+          </div>
+          <StarDial v-if="newTask.time" v-model="newTask.time" :show-actions="false" />
           <label class="mf-label">优先级</label>
           <select v-model="newTask.priority" class="mf-input">
             <option value="high">🔴 高</option>
@@ -377,6 +411,36 @@ function handleImport(selected) {
 
 .modal-panel-sm {
   max-width: 400px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+/* 开始时间：流动/钉住切换 */
+.mf-time-toggle {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.mf-time-btn {
+  flex: 1;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  background: var(--bg-muted);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.mf-time-btn.on {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-muted);
+  font-weight: 600;
+}
+
+.mf-time-toggle + .star-dial {
+  margin-top: var(--space-3);
 }
 
 .modal-head {

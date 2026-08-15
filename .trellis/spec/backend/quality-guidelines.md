@@ -143,6 +143,20 @@ transition: opacity var(--ease), transform var(--ease-spring);
 - **CSS order**: `style.css` → `overlay-anim.css` → `timeline.css`
 - **appMain wrapper**: `<div id="appMain">` wraps the container for drawer push animation
 
+## Vue3 frontend (`frontend/`, post-v10)
+
+The vanilla-JS rules above apply to legacy pages only. The Vue 3 + Vite frontend has its own enforced constraints:
+
+- **CSS target chrome80** (`vite.config.js` `build.target es2020` + `cssTarget chrome80`): no `color-mix()`, no `:has()`, no media range syntax (`@media (width<=768px)`). Use hex-alpha vars (`#e8c87433`) for transparency. Old WebKit (Quark/UC) silently drops unsupported CSS — this broke all mobile styles once.
+- **Fixed-position overlays MUST be `<Teleport to="body">`**: `backdrop-filter` / `transform` / `overflow` ancestors (sidebar blur, card 3D flips, scrollable grids) become containing blocks and clip fixed descendants (Session 8 mood-picker glitch; TaskCard flip edit panel).
+- **Drag interactions: Pointer Events, never HTML5 DnD** — HTML5 drag does not fire on touchscreens. Pattern in `composables/useDragSort.js`: 6px threshold (mouse), long-press 280ms arm (touch, aborts to native scroll on early move), floating clone teleported to body, edge auto-scroll, residual-click suppression.
+- **Animation hygiene**: anime.js for JS animation; particle spans removed in `complete`; rAF loops cancelled on unmount AND paused on `document.hidden` (visibilitychange); all effect entry points respect `prefers-reduced-motion` (see `composables/useAnime.js`).
+- **Mobile (≤768px) perf**: no `backdrop-filter` on full-screen/persistent elements (sidebar, header, glass cards, backdrops) — old mobile GPUs repaint the whole screen per scroll frame. Replace with a near-opaque solid (`--glass-bg-solid` in variables.css) inside a legacy-syntax media query; desktop keeps blur. Never put `filter`/`drop-shadow` on an element animated per-frame by rAF/JS — paint the glow on a separate static layer that only transforms.
+- **Timeline order contract (08-15, `orderCfg` v2)**: `orderCfg[date].order` is the GLOBAL arrangement of pinned + flow block ids. Iron rule: no flow-block operation (reorder, pin, import, delete) may mutate an existing pinned block's `time`/`duration` — only explicit time edit or dragging that pinned block itself. Flows are placed in global order into gaps between pinned blocks; overflow spills past the pinned end (never shifts it). Any pin transition (drag-drop, StarDial, edit panel) must remove the id from `order` (a stale flow-rank becomes a false anchor). Persisted orders carry `v: 2`; unversioned orders are migrated on `fetchDay` by stripping pinned ids.
+- **Per-instance SVG ids**: counters must live in a module-level `<script>` block, not `<script setup>` (which is per-instance) — 7+ copies of one component on a page (MoodWeek minis) will collide otherwise.
+- **Clipped SVG layer paths**: each layer's path must cover only its own band (+small seam), never run to the container bottom — the last-painted layer would hide everything below (WishingBottle waveD bug, 08-15).
+- **Mobile verification**: CDP headless Chrome blocks bare-IP navigation — audit through a 127.0.0.1 reverse proxy instead.
+
 ## Python (FastAPI + DB)
 
 - **SQL dialect**: Write MySQL, adapters convert for SQLite/PostgreSQL

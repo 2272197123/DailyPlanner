@@ -139,4 +139,13 @@ const displayDate = computed(() => fmtDate(scheduleStore.currentDate))
   font-size: var(--text-sm);
   gap: var(--space-1);
 }
+
+/* 移动端去 blur：实色底保持观感，避免 sticky 头部滚动时滤镜重绘 */
+@media (max-width: 768px) {
+  .app-header {
+    background: var(--glass-bg-solid);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
 </style>

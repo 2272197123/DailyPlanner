@@ -282,6 +282,20 @@ class SQLiteDB(DBInterface):
             ON moods (user_id, date)
         """)
         self.execute("""
+            CREATE TABLE IF NOT EXISTS mood_vents (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id     INTEGER NOT NULL,
+                date        TEXT NOT NULL,
+                text        TEXT NOT NULL DEFAULT '',
+                color       TEXT NOT NULL DEFAULT '#9ca3af',
+                created_at  TEXT DEFAULT (datetime('now','localtime'))
+            )
+        """)
+        self.execute("""
+            CREATE INDEX IF NOT EXISTS idx_mood_vents_user_date
+            ON mood_vents (user_id, date)
+        """)
+        self.execute("""
             CREATE TABLE IF NOT EXISTS ledger (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id     INTEGER NOT NULL,
@@ -568,6 +582,17 @@ class MySQLDB(DBInterface):
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         """)
         self.execute("""
+            CREATE TABLE IF NOT EXISTS mood_vents (
+                id          INT PRIMARY KEY AUTO_INCREMENT,
+                user_id     INT NOT NULL,
+                date        VARCHAR(10) NOT NULL,
+                text        TEXT,
+                color       VARCHAR(7) NOT NULL DEFAULT '#9ca3af',
+                created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_mood_vents_user_date (user_id, date)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """)
+        self.execute("""
             CREATE TABLE IF NOT EXISTS ledger (
                 id          INTEGER PRIMARY KEY AUTO_INCREMENT,
                 user_id     INTEGER NOT NULL,
@@ -711,6 +736,8 @@ class PostgreSQLDB(DBInterface):
             # 简单聚合：用一个通用的冲突解析
             conflict_col = ""
             if "plans" in sql.lower():
+                conflict_col = "user_id, date"
+            elif "moods" in sql.lower():
                 conflict_col = "user_id, date"
             elif "progress" in sql.lower():
                 conflict_col = "user_id, date"
@@ -886,6 +913,20 @@ class PostgreSQLDB(DBInterface):
         self.execute("""
             CREATE INDEX IF NOT EXISTS idx_moods_user_date
             ON moods (user_id, date)
+        """)
+        self.execute("""
+            CREATE TABLE IF NOT EXISTS mood_vents (
+                id          SERIAL PRIMARY KEY,
+                user_id     INTEGER NOT NULL,
+                date        VARCHAR(10) NOT NULL,
+                text        TEXT DEFAULT '',
+                color       VARCHAR(7) NOT NULL DEFAULT '#9ca3af',
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        self.execute("""
+            CREATE INDEX IF NOT EXISTS idx_mood_vents_user_date
+            ON mood_vents (user_id, date)
         """)
         self.execute("""
             CREATE TABLE IF NOT EXISTS ledger (
@@ -1191,6 +1232,109 @@ def save_progress(user_id: int, p: dict):
 
 # ── 心情 ──
 
+def _vent_dict(r: dict) -> dict:
+    return {
+        "id": r["id"],
+        "text": r["text"] or "",
+        "color": r["color"],
+        "created_at": r.get("created_at") or "",
+    }
+
+
+def list_vents(user_id: int, date: str) -> list[dict]:
+    db = get_db()
+    rows = db.fetchall(
+        "SELECT * FROM mood_vents WHERE user_id = %s AND date = %s "
+        "ORDER BY created_at ASC, id ASC",
+        (user_id, date),
+    )
+    return [_vent_dict(r) for r in rows]
+
+
+def list_vents_by_year(user_id: int, year: int) -> dict:
+    """返回 {date: [vent, ...]}，供年视图一次取齐。"""
+    db = get_db()
+    rows = db.fetchall(
+        "SELECT * FROM mood_vents WHERE user_id = %s AND date LIKE %s "
+        "ORDER BY created_at ASC, id ASC",
+        (user_id, f"{year}%"),
+    )
+    grouped = {}
+    for r in rows:
+        grouped.setdefault(r["date"], []).append(_vent_dict(r))
+    return grouped
+
+
+def _srgb_to_linear(c: float) -> float:
+    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+
+def _linear_to_srgb(c: float) -> float:
+    return c * 12.92 if c <= 0.0031308 else 1.055 * (c ** (1 / 2.4)) - 0.055
+
+
+def _blend_colors(hexes: list[str]) -> str:
+    """多条吐槽颜色混合：sRGB → 线性光空间算术平均 → 回 sRGB。
+    前端 utils/color.js 的 mixColors 与本函数算法保持一致。"""
+    if not hexes:
+        return "#9ca3af"
+    acc = [0.0, 0.0, 0.0]
+    for h in hexes:
+        h = h.lstrip("#")
+        for i in range(3):
+            acc[i] += _srgb_to_linear(int(h[i * 2:i * 2 + 2], 16) / 255.0)
+    n = len(hexes)
+    out = []
+    for i in range(3):
+        v = max(0, min(255, round(_linear_to_srgb(acc[i] / n) * 255)))
+        out.append(f"{v:02x}")
+    return "#" + "".join(out)
+
+
+def _refresh_day_color(user_id: int, date: str):
+    """有 vents → 混合色写回 moods.color（无行则补建行）；无 vents → 不动。"""
+    db = get_db()
+    vents = list_vents(user_id, date)
+    if not vents:
+        return
+    color = _blend_colors([v["color"] for v in vents])
+    db.execute(
+        "INSERT INTO moods (user_id, date, color, label, note, intensity, updated_at) "
+        "VALUES (%s,%s,%s,'一般','',2, NOW()) "
+        "ON DUPLICATE KEY UPDATE color=VALUES(color), updated_at=NOW()",
+        (user_id, date, color),
+    )
+
+
+def add_vent(user_id: int, date: str, text: str, color: str) -> int:
+    db = get_db()
+    cur = db.execute(
+        "INSERT INTO mood_vents (user_id, date, text, color, created_at) "
+        "VALUES (%s,%s,%s,%s, NOW())",
+        (user_id, date, text, color),
+    )
+    _refresh_day_color(user_id, date)
+    db.commit()
+    return cur.lastrowid
+
+
+def delete_vent(user_id: int, vent_id: int) -> bool:
+    db = get_db()
+    row = db.fetchone(
+        "SELECT date FROM mood_vents WHERE id = %s AND user_id = %s",
+        (vent_id, user_id),
+    )
+    if not row:
+        return False
+    db.execute(
+        "DELETE FROM mood_vents WHERE id = %s AND user_id = %s",
+        (vent_id, user_id),
+    )
+    _refresh_day_color(user_id, row["date"])
+    db.commit()
+    return True
+
+
 def get_mood(user_id: int, date: str) -> dict | None:
     db = get_db()
     row = db.fetchone(
@@ -1205,17 +1349,21 @@ def get_mood(user_id: int, date: str) -> dict | None:
         "label": row["label"],
         "note": row["note"] or "",
         "intensity": row["intensity"] or 2,
+        "vents": list_vents(user_id, date),
     }
 
 
 def save_mood(user_id: int, m: dict):
     db = get_db()
+    # 该日已有吐槽时忽略传入 color，保留混合色（预设卡只改基调/备注）
+    vents = list_vents(user_id, m["date"])
+    color = _blend_colors([v["color"] for v in vents]) if vents else m.get("color", "#9ca3af")
     db.execute(
         "INSERT INTO moods (user_id, date, color, label, note, intensity, updated_at) "
         "VALUES (%s,%s,%s,%s,%s,%s, NOW()) "
         "ON DUPLICATE KEY UPDATE color=VALUES(color), label=VALUES(label), note=VALUES(note), "
         "intensity=VALUES(intensity), updated_at=NOW()",
-        (user_id, m["date"], m.get("color", "#9ca3af"), m.get("label", "一般"),
+        (user_id, m["date"], color, m.get("label", "一般"),
          m.get("note", ""), m.get("intensity", 2)),
     )
     db.commit()
@@ -1238,17 +1386,25 @@ def list_moods(user_id: int, year: int | None = None) -> list[dict]:
             "SELECT * FROM moods WHERE user_id = %s AND date LIKE %s ORDER BY date ASC",
             (user_id, f"{year}%"),
         )
+        vents_by_date = list_vents_by_year(user_id, year)
     else:
         rows = db.fetchall(
             "SELECT * FROM moods WHERE user_id = %s ORDER BY date ASC",
             (user_id,),
         )
+        vents_by_date = {}
+        for v in db.fetchall(
+            "SELECT * FROM mood_vents WHERE user_id = %s ORDER BY created_at ASC, id ASC",
+            (user_id,),
+        ):
+            vents_by_date.setdefault(v["date"], []).append(_vent_dict(v))
     return [{
         "date": r["date"],
         "color": r["color"],
         "label": r["label"],
         "note": r["note"] or "",
         "intensity": r["intensity"] or 2,
+        "vents": vents_by_date.get(r["date"], []),
     } for r in rows]
 
 

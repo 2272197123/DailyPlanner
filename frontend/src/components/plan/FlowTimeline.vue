@@ -7,6 +7,7 @@ import { useCurrencyStore } from '@/stores/currency'
 import { useToastStore } from '@/stores/toast'
 import { toLocalDate, calcTaskReward } from '@/utils/format'
 import { useAnime } from '@/composables/useAnime'
+import { useDragSort } from '@/composables/useDragSort'
 import { CAT_EMOJI } from '@/utils/constants'
 import TaskCard from '@/components/timeline/TaskCard.vue'
 import RoutineItem from '@/components/timeline/RoutineItem.vue'
@@ -274,40 +275,17 @@ function onRoutineToggle() {
   maybeCelebrate()
 }
 
-/* ═══ 拖拽排序（仅任务块，HTML5 DnD）═══ */
-const dragId = ref(null)
-const dragOverId = ref(null)
+/* ═══ 拖拽排序（Pointer Events，鼠标 + 触屏；见 useDragSort）═══ */
+const { dragging, dragId, clonePos, indicator } = useDragSort({
+  containerRef: rootRef,
+  onDrop: (id, target) => scheduleStore.resolveDrop(scheduleStore.currentDate, id, target)
+})
 
-function onDragStart(row, event) {
-  dragId.value = row.payload.id
-  event.dataTransfer.effectAllowed = 'move'
-}
-
-function onDragOver(row, event) {
-  if (!dragId.value || row.kind !== 'block') return
-  event.preventDefault()
-  event.dataTransfer.dropEffect = 'move'
-  dragOverId.value = row.payload.id
-}
-
-function onDrop(row) {
-  if (!dragId.value || row.kind !== 'block') return
-  const date = scheduleStore.currentDate
-  const ids = scheduleStore.getComputedTimeline(date).map(b => b.id)
-  const from = ids.indexOf(dragId.value)
-  const to = ids.indexOf(row.payload.id)
-  if (from !== -1 && to !== -1 && from !== to) {
-    ids.splice(to, 0, ids.splice(from, 1)[0])
-    scheduleStore.applyOrder(date, ids)
-  }
-  dragId.value = null
-  dragOverId.value = null
-}
-
-function onDragEnd() {
-  dragId.value = null
-  dragOverId.value = null
-}
+/* 悬浮副本展示的块信息 */
+const dragBlock = computed(() => {
+  if (!dragId.value) return null
+  return scheduleStore.getComputedTimeline(scheduleStore.currentDate).find(b => b.id === dragId.value) || null
+})
 
 /* ═══ 固定事务模板管理（折叠面板）═══ */
 const showRoutineMgr = ref(false)
@@ -391,16 +369,9 @@ onUnmounted(() => {
         v-for="row in rows"
         :key="row.key"
         class="flow-row"
-        :class="{
-          'flow-now-row': row.kind === 'now',
-          'drag-over': row.kind === 'block' && dragOverId === row.payload.id,
-          dragging: row.kind === 'block' && dragId === row.payload.id
-        }"
-        :draggable="row.kind === 'block'"
-        @dragstart="row.kind === 'block' && onDragStart(row, $event)"
-        @dragover="row.kind === 'block' && onDragOver(row, $event)"
-        @drop="row.kind === 'block' && onDrop(row)"
-        @dragend="onDragEnd"
+        :class="{ 'flow-now-row': row.kind === 'now' }"
+        :data-bid="row.kind === 'block' ? row.payload.id : undefined"
+        :data-pinned="row.kind === 'block' && row.payload.time ? '1' : undefined"
       >
         <!-- 现在时刻线 -->
         <div v-if="row.kind === 'now'" class="flow-now">
@@ -417,7 +388,6 @@ onUnmounted(() => {
           :data-bid="row.payload.id"
           :data-cat="row.payload.category || 'other'"
         >
-          <span v-if="row.payload.time" class="flow-pin" title="固定日程">📌</span>
           <TaskCard
             :block="row.payload"
             :index="0"
@@ -503,6 +473,31 @@ onUnmounted(() => {
 
     <!-- 单任务完成：卡牌翻转庆祝 -->
     <CardCelebration ref="celebrationRef" />
+
+    <!-- 拖拽悬浮副本 + 插入指示线（fixed 元素，Teleport body） -->
+    <Teleport to="body">
+      <div
+        v-if="dragging && dragBlock"
+        class="drag-clone"
+        :style="{ left: clonePos.left + 'px', top: clonePos.top + 'px', width: clonePos.width + 'px' }"
+      >
+        <span class="dc-time">{{ dragBlock._startStr }}–{{ dragBlock._endStr }}</span>
+        <span class="dc-subject">{{ dragBlock.subject || '(未命名)' }}</span>
+      </div>
+      <div
+        v-if="dragging && indicator.show"
+        class="drop-indicator"
+        :class="'di-' + indicator.mode"
+        :style="{
+          left: indicator.left + 'px',
+          top: indicator.top + 'px',
+          width: indicator.width + 'px',
+          height: indicator.mode === 'pin' ? indicator.height + 'px' : '0px'
+        }"
+      >
+        <span class="di-icon">{{ indicator.mode === 'pin' ? '📌' : '↕' }}</span>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -584,17 +579,82 @@ onUnmounted(() => {
 /* ── Rows ── */
 .flow-row {
   position: relative;
-  border-top: 2px solid transparent;
-  transition: border-color var(--duration-fast) var(--ease-out),
-              opacity var(--duration-fast) var(--ease-out);
 }
 
-.flow-row.dragging {
-  opacity: 0.45;
+/* 任务块行：触屏允许纵向滚动，拖起后由 useDragSort 接管手势 */
+.flow-row[data-bid] {
+  touch-action: pan-y;
 }
 
-.flow-row.drag-over {
-  border-top-color: var(--accent);
+/* 拖拽源行：半透明占位（不移出 DOM，避免布局跳动；class 由 useDragSort 添加） */
+.flow-row.drag-src {
+  opacity: 0.4;
+}
+
+/* ── 拖拽悬浮副本 / 插入指示线（Teleport 到 body 的 fixed 元素） ── */
+.drag-clone {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-elevated);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  opacity: 0.94;
+  transform: rotate(1.2deg);
+}
+
+.dc-time {
+  font-family: var(--font-data);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.dc-subject {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drop-indicator {
+  position: fixed;
+  z-index: 999;
+  pointer-events: none;
+}
+
+/* 间隙重排：发光线 + ↕ */
+.drop-indicator.di-gap {
+  border-top: 2px solid var(--accent);
+  box-shadow: 0 -1px 8px var(--accent);
+}
+
+/* 落在钉时块上：金色描边 + 📌 */
+.drop-indicator.di-pin {
+  border: 2px solid #e8c874;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 0 12px rgba(232, 200, 116, 0.55);
+  transform: translateY(-2px);
+}
+
+.di-icon {
+  position: absolute;
+  right: var(--space-3);
+  top: -12px;
+  font-size: 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-full);
+  padding: 1px var(--space-2);
+  line-height: 1.4;
 }
 
 /* ── 任务块外壳：当前主任务高亮 ── */
@@ -614,15 +674,6 @@ onUnmounted(() => {
   border-color: var(--accent);
   box-shadow: var(--shadow-md);
   transform: scale(1.01);
-}
-
-.flow-pin {
-  position: absolute;
-  top: -8px;
-  right: var(--space-3);
-  z-index: 2;
-  font-size: 12px;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
 }
 
 /* ── 现在时刻线 ── */
@@ -859,6 +910,18 @@ onUnmounted(() => {
 @media (max-width: 768px) {
   .flow-timeline {
     padding-bottom: var(--space-8);
+  }
+
+  /* 去 blur：实色底保持观感，避免滚动时滤镜重绘 */
+  .flow-header {
+    background: var(--glass-bg-solid);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  /* 滚动变色保留，但缩短全屏背景过渡（降低移动端大面积重绘时长） */
+  .flow-ambient {
+    transition-duration: 0.3s;
   }
 
   .flow-header {

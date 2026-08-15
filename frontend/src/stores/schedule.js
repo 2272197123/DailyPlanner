@@ -107,6 +107,16 @@ export const useScheduleStore = defineStore('schedule', {
         }
         const order = orderResp ? unwrap(orderResp.data) : null
         if (order && (order.start || Array.isArray(order.order))) {
+          /* v2 起 order 为全局顺序（钉时 id 由拖拽落点显式写入、作为锚点）。
+             旧版写入的 order 可能混入钉时 id（旧 setTimelineStart 兜底按计划数组
+             原始序整列写入、旧拖拽按展示序整列写入），那些钉时排位并非锚点意图——
+             迁移时剔除，否则旧数据里的钉时块会把排在它之后的流动块错推到其结束之后 */
+          if (order.v !== 2 && Array.isArray(order.order)) {
+            const pinnedIds = new Set(
+              (this.schedules[date]?.blocks || []).filter(b => _isTimeStr(b.time)).map(b => b.id)
+            )
+            if (pinnedIds.size) order.order = order.order.filter(id => !pinnedIds.has(id))
+          }
           this.orderCfg[date] = order
         }
         const earned = earnedResp ? earnedResp.data?.earned : null
@@ -290,7 +300,18 @@ export const useScheduleStore = defineStore('schedule', {
       if (!sched || !sched.blocks) return
       const idx = sched.blocks.findIndex(b => b.id === blockId)
       if (idx === -1) return
+      const wasPinned = _isTimeStr(sched.blocks[idx].time)
       Object.assign(sched.blocks[idx], updates)
+      /* 流动→钉时（轮盘钉住 / 编辑面板设时间）：与拖拽钉住一致，从全局顺序移除——
+         残留的流动排位会变成钉时锚点，把排在它之后的流动块错推到钉时块结束之后。
+         转为流动（清除时间）不动 order：该 id 自然按兜底规则排到末尾（同新建块） */
+      if (!wasPinned && _isTimeStr(sched.blocks[idx].time)) {
+        const oc = this.orderCfg[date]
+        if (oc && Array.isArray(oc.order) && oc.order.includes(blockId)) {
+          oc.order = oc.order.filter(id => id !== blockId)
+          this._persistOrderCfg(date)
+        }
+      }
       this.saveDay(date)
     },
 
@@ -375,28 +396,151 @@ export const useScheduleStore = defineStore('schedule', {
     _persistOrderCfg(date) {
       const cfg = this.orderCfg[date]
       if (!cfg) return
-      api.put(`/order/${date}`, { start: cfg.start || '09:00', order: cfg.order || [] }).catch(() => {})
+      /* v:2 = 全局顺序语义（钉时 id 在列即锚点）；无 v 的旧数据在 fetchDay 迁移 */
+      api.put(`/order/${date}`, { start: cfg.start || '09:00', order: cfg.order || [], v: 2 }).catch(() => {})
     },
 
     setTimelineStart(date, time) {
-      const blocks = this.schedules[date]?.blocks || []
       const existing = this.orderCfg[date]
       this.orderCfg[date] = {
         start: time,
         order: Array.isArray(existing?.order) && existing.order.length
           ? existing.order
-          : blocks.map(b => b.id)
+          /* 无既有顺序时以当前展示序（含钉时块、按计算时间）初始化全局顺序，
+             避免用计划数组原始序导致钉时锚点错位 */
+          : this.getComputedTimeline(date).map(b => b.id)
       }
       this._persistOrderCfg(date)
     },
 
     applyOrder(date, orderIds) {
+      /* order 语义 = 全局顺序（钉时 + 流动 id 皆在列，即用户的排列意图）。
+         兼容旧数据：旧 order 只含流动 id 也可直接使用（未出现的 id 按兜底规则排序）。 */
       const existing = this.orderCfg[date]
       this.orderCfg[date] = {
         start: existing?.start || this.timelineCfg[date]?.start || '09:00',
         order: orderIds
       }
       this._persistOrderCfg(date)
+    },
+
+    /**
+     * 拖拽落点动作解析（useDragSort 的 onDrop 回调）
+     * target = { beforeId }（插入到某块之前；null = 末尾）或 { onId }（落在钉时块上）
+     * - 流动块落间隙 → 插入全局顺序对应位置（钉时块 id 也在序列中，落钉时块前间隙
+     *   不再误追加到末尾）；纯重排，不改任何块的时间
+     * - 流动块落到钉时块上 → 钉住被拖块（时间=目标开始，冲突只顺延被拖块自身，5min 取整）
+     * - 钉时块拖动 → 只改被拖块自身时间（落点映射时间，避开其他钉时块）
+     * 铁律：以上任何路径都不改写「既有钉时块」的 time/duration。
+     */
+    resolveDrop(date, dragId, target) {
+      const sched = this.schedules[date]
+      if (!sched || !sched.blocks || !target) return
+      const dragged = sched.blocks.find(b => b.id === dragId)
+      if (!dragged) return
+      const timeline = this.getComputedTimeline(date)
+      const dur = dragged.duration || 30
+      const pinnedOthers = timeline.filter(b => b.id !== dragId && _isTimeStr(b.time))
+
+      /* 5 分钟取整 + 避开钉时块（与其他钉时块重叠则顺延到其后） */
+      const settle = (min) => {
+        let s = Math.round(min / 5) * 5
+        for (let i = 0; i < 6; i++) {
+          let moved = false
+          for (const p of pinnedOthers) {
+            if (s < p._endMin && s + dur > p._startMin) {
+              s = Math.round(p._endMin / 5) * 5
+              moved = true
+            }
+          }
+          if (!moved) break
+        }
+        return Math.max(0, Math.min(s, 24 * 60 - dur))
+      }
+
+      if (_isTimeStr(dragged.time)) {
+        /* 钉时块拖动 → 改时间 */
+        let base = null
+        if (target.onId && target.onId !== dragId) {
+          const t = timeline.find(b => b.id === target.onId)
+          base = t ? t._startMin : null
+        } else {
+          /* 间隙：取前后相邻块时间中点（无前块用时间轴起点，无后块用前块结束） */
+          const others = timeline.filter(b => b.id !== dragId)
+          let idx = target.beforeId ? others.findIndex(b => b.id === target.beforeId) : others.length
+          if (idx === -1) idx = others.length
+          const prev = idx > 0 ? others[idx - 1] : null
+          const next = idx < others.length ? others[idx] : null
+          if (prev && next) base = Math.round((prev._startMin + next._startMin) / 2)
+          else if (next) base = _parseTime(this.orderCfg[date]?.start || this.timelineCfg[date]?.start || '09:00')
+          else if (prev) base = prev._endMin
+          else base = 9 * 60
+        }
+        if (base === null) return
+        dragged.time = _fmtMin(settle(base))
+        this.saveDay(date)
+        return
+      }
+
+      if (target.onId && target.onId !== dragId) {
+        /* 流动块落到钉时块上 → 钉住被拖块：时间=目标开始，冲突只顺延被拖块自身；
+           目标钉时块与其他块一律不动。随后从全局顺序移除——钉住后位置由 time 决定，
+           残留的旧流动排位会变成钉时锚点、错误地把后续流动块推到其结束之后 */
+        const t = timeline.find(b => b.id === target.onId)
+        if (!t || !_isTimeStr(t.time)) return
+        dragged.time = _fmtMin(settle(t._startMin))
+        this.saveDay(date)
+        const oc = this.orderCfg[date]
+        if (oc && Array.isArray(oc.order) && oc.order.includes(dragId)) {
+          this.applyOrder(date, oc.order.filter(id => id !== dragId))
+        }
+        return
+      }
+
+      /* 流动块落间隙 → 插入全局顺序的对应位置。
+         工作序列 = 当前展示序（钉时 + 流动）：beforeId 是钉时块 id 时同样精确插入，
+         不再因 flowIds.indexOf = -1 而追加到流动序末尾（视觉落点与结果一致） */
+      const ids = timeline.map(b => b.id)
+      const from = ids.indexOf(dragId)
+      if (from === -1) return
+      ids.splice(from, 1)
+      let to = target.beforeId ? ids.indexOf(target.beforeId) : ids.length
+      if (to === -1) to = ids.length
+      ids.splice(to, 0, dragId)
+      if (ids.every((id, i) => id === timeline[i].id)) return // 位置未变，省去一次写盘
+      this.applyOrder(date, ids)
+    },
+
+    /** 把任务块移到另一天：两边 saveDay；目标日全局顺序追加（流动块） */
+    moveBlockToDate(fromDate, toDate, blockId) {
+      if (fromDate === toDate) return
+      const from = this.schedules[fromDate]
+      if (!from || !from.blocks) return
+      const idx = from.blocks.findIndex(b => b.id === blockId)
+      if (idx === -1) return
+      const [block] = from.blocks.splice(idx, 1)
+      if (!this.schedules[toDate]) {
+        this.schedules[toDate] = { blocks: [], dayMode: this.mode, startTime: '09:00' }
+      }
+      this.schedules[toDate].blocks.push(block)
+      /* 原日全局顺序移除 */
+      const oc = this.orderCfg[fromDate]
+      if (oc && Array.isArray(oc.order) && oc.order.includes(blockId)) {
+        oc.order = oc.order.filter(id => id !== blockId)
+        this._persistOrderCfg(fromDate)
+      }
+      /* 目标日全局顺序追加（无既有顺序时以当前展示序初始化，避免数组原始序错位锚点） */
+      if (!_isTimeStr(block.time)) {
+        const toc = this.orderCfg[toDate]
+        const order = Array.isArray(toc?.order)
+          ? [...toc.order]
+          : this.getComputedTimeline(toDate).map(b => b.id).filter(id => id !== blockId)
+        order.push(blockId)
+        this.orderCfg[toDate] = { start: toc?.start || this.timelineCfg[toDate]?.start || '09:00', order }
+        this._persistOrderCfg(toDate)
+      }
+      this.saveDay(fromDate)
+      this.saveDay(toDate)
     },
 
     /* ── XP 防刷分：每个条目每天只发一次（服务端幂等）── */
@@ -409,54 +553,69 @@ export const useScheduleStore = defineStore('schedule', {
     },
 
     /**
-     * Calculate cumulative start times（先按 orderCfg 排序，再推算 _startMin）
-     * v13：block.time 非空的为"钉时块"（固定日程），保持其时间不变；
-     * 其余为"流动块"，从 timelineStart 顺排，与钉时块重叠时自动绕到其后。
-     * 最终输出按 _startMin 升序。
+     * Calculate cumulative start times（全局顺序 → 推算 _startMin）
+     * v15：orderCfg.order 升级为「全局顺序」——钉时 + 流动 id 皆在列，即用户排列意图。
+     * - 钉时块（block.time 非空）：时间固定，只按开始时间排序展示，永不被推算改动；
+     * - 流动块：按全局顺序从 timelineStart 起依次放入钉时块之间的空档——
+     *   排在钉时块 P 之前的流动块须整体放入 [cursor, P.start)；放不下则顺延到
+     *   P.end 之后的空档继续按顺序放（流动块间相对顺序不变，钉时块不动）；
+     * - 钉时锚点：在 order 中有明确排位的钉时块，排在它之后的流动块不得早于它结束；
+     * - 兼容旧数据：旧 order 只含流动 id 时，未出现的 id 排在已知 id 之后
+     *   （保持计划数组原始相对顺序），未排位的钉时块不锚定，行为与旧版
+     *   「流动顺排、遇钉时绕行」完全一致。
+     * 最终输出按 _startMin 升序，并列按全局顺序索引。
      */
     getComputedTimeline(date) {
       const sched = this.schedules[date]
       if (!sched || !sched.blocks) return []
       const order = this.orderCfg[date]?.order
-      let blocks = sched.blocks
-      if (Array.isArray(order) && order.length) {
-        const rank = new Map(order.map((id, i) => [id, i]))
-        blocks = [...sched.blocks].sort((a, b) => {
-          const ra = rank.has(a.id) ? rank.get(a.id) : order.length
-          const rb = rank.has(b.id) ? rank.get(b.id) : order.length
-          return ra - rb
-        })
+      const rank = new Map()
+      if (Array.isArray(order)) order.forEach((id, i) => { if (!rank.has(id)) rank.set(id, i) })
+      const base = Array.isArray(order) ? order.length : 0
+      const items = sched.blocks.map((b, i) => ({
+        b,
+        ranked: rank.has(b.id),
+        rank: rank.has(b.id) ? rank.get(b.id) : base + i
+      }))
+      items.sort((x, y) => x.rank - y.rank)
+
+      /* 钉时块：按 time 固定，仅排序展示 */
+      const pinnedComputed = []
+      for (const { b, rank } of items) {
+        if (!_isTimeStr(b.time)) continue
+        const start = _parseTime(b.time)
+        const end = start + (b.duration || 30)
+        pinnedComputed.push({ ...b, _rank: rank, _startMin: start, _endMin: end, _startStr: _fmtMin(start), _endStr: _fmtMin(end) })
       }
+      pinnedComputed.sort((a, b) => a._startMin - b._startMin || a._rank - b._rank)
 
-      const pinned = []
-      const flow = []
-      for (const b of blocks) {
-        if (_isTimeStr(b.time)) pinned.push(b)
-        else flow.push(b)
-      }
-
-      const pinnedComputed = pinned
-        .map(b => {
-          const start = _parseTime(b.time)
-          const end = start + (b.duration || 30)
-          return { ...b, _startMin: start, _endMin: end, _startStr: _fmtMin(start), _endStr: _fmtMin(end) }
-        })
-        .sort((a, b) => a._startMin - b._startMin)
-
-      const [sh, sm] = this.timelineStart.split(':').map(Number)
+      /* 按所查日期取起点（不用 timelineStart getter——它只看 currentDate，
+         moveBlockToDate/setTimelineStart 会为其他日期调用本函数）；
+         对 currentDate 而言与 getter 完全等价（同一优先级链） */
+      const startStr = this.orderCfg[date]?.start || this.timelineCfg[date]?.start || '09:00'
+      const [sh, sm] = startStr.split(':').map(Number)
       let cursor = sh * 60 + sm
-      const flowComputed = flow.map(b => {
+      const flowComputed = []
+      for (const { b, rank, ranked } of items) {
+        if (_isTimeStr(b.time)) {
+          /* 钉时锚点（仅 order 中有明确排位时）：后续流动块不得早于它结束 */
+          if (ranked) {
+            const end = _parseTime(b.time) + (b.duration || 30)
+            if (end > cursor) cursor = end
+          }
+          continue
+        }
         const dur = b.duration || 30
-        // 与钉时块重叠 → 顺延到其后（钉时块已按开始时间升序）
+        /* 空档放不下（与钉时块重叠）→ 整体顺延到该钉时块结束之后 */
         for (const p of pinnedComputed) {
           if (cursor < p._endMin && cursor + dur > p._startMin) cursor = p._endMin
         }
         const start = cursor
         cursor = start + dur
-        return { ...b, _startMin: start, _endMin: cursor, _startStr: _fmtMin(start), _endStr: _fmtMin(cursor) }
-      })
+        flowComputed.push({ ...b, _rank: rank, _startMin: start, _endMin: cursor, _startStr: _fmtMin(start), _endStr: _fmtMin(cursor) })
+      }
 
-      return [...pinnedComputed, ...flowComputed].sort((a, b) => a._startMin - b._startMin)
+      return [...pinnedComputed, ...flowComputed].sort((a, b) => a._startMin - b._startMin || a._rank - b._rank)
     },
 
     initFromCache() {

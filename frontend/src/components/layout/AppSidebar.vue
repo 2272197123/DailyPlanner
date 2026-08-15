@@ -84,10 +84,12 @@ function getMood(date) {
 }
 
 function getCellColor(date) {
+  // 混合色：有吐槽的天显示 vents 线性混合色（store dayColor 统一口径）
+  const color = moodStore.dayColor(date)
+  if (!color) return 'var(--bg-muted)'
   const mood = getMood(date)
-  if (!mood) return 'var(--bg-muted)'
-  const alpha = 0.35 + (mood.intensity || 2) * 0.18
-  return mood.color + Math.round(alpha * 255).toString(16).padStart(2, '0')
+  const alpha = 0.35 + (mood?.intensity || 2) * 0.18
+  return color + Math.round(alpha * 255).toString(16).padStart(2, '0')
 }
 
 /* 心情格子：点击弹出正规选择器（不再随机指派心情） */
@@ -608,6 +610,10 @@ watch(() => route.name, () => {
     transition: transform var(--duration-normal) var(--ease-out);
     width: 280px;
     box-shadow: var(--shadow-lg);
+    /* 移动端去 blur：实色底保持观感，避免抽屉滑动/滚动时全屏滤镜重绘 */
+    background: var(--glass-bg-solid);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
   .app-sidebar.open {
     transform: translateX(0);
@@ -629,10 +635,8 @@ watch(() => route.name, () => {
     width: 40px;
     height: 40px;
     border-radius: var(--radius-md);
-    background: var(--glass-bg);
+    background: var(--glass-bg-solid);
     border: 1px solid var(--glass-border);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
     box-shadow: var(--shadow-md);
     color: var(--text-primary);
     font-size: 1.1rem;
@@ -652,10 +656,8 @@ watch(() => route.name, () => {
     width: 40px;
     height: 40px;
     border-radius: var(--radius-md);
-    background: var(--glass-bg);
+    background: var(--glass-bg-solid);
     border: 1px solid var(--glass-border);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
     box-shadow: var(--shadow-md);
     color: var(--text-primary);
     font-size: 1.1rem;
@@ -666,8 +668,8 @@ watch(() => route.name, () => {
     position: fixed;
     inset: 0;
     z-index: calc(var(--z-sticky) - 1);
-    background: rgba(0, 0, 0, 0.35);
-    backdrop-filter: blur(2px);
+    /* 移动端不留 backdrop-filter（全屏滤镜重绘）；提高不透明度补偿去 blur 后的遮挡感 */
+    background: rgba(0, 0, 0, 0.45);
   }
 }
 </style>

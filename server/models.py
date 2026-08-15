@@ -82,6 +82,11 @@ class MoodEntry(BaseModel):
     intensity: int = 2
 
 
+class VentEntry(BaseModel):
+    text: str = ""
+    color: str = ""
+
+
 class BalanceUpdate(BaseModel):
     balance: int
 

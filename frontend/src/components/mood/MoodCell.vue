@@ -15,12 +15,20 @@ const bgStyle = computed(() => {
   if (!props.mood) return { backgroundColor: 'var(--bg-muted)' }
   const alpha = 0.35 + (props.mood.intensity || 2) * 0.16
   const hexAlpha = Math.round(alpha * 255).toString(16).padStart(2, '0')
+  const vents = props.mood.vents || []
+  // 多条吐槽 → 多色渐变（线性拼接 vents 颜色），单日丰富多彩
+  if (vents.length > 1) {
+    const stops = vents.map(v => v.color + hexAlpha).join(', ')
+    return { background: `linear-gradient(135deg, ${stops})` }
+  }
   return { backgroundColor: props.mood.color + hexAlpha }
 })
 
 const tooltip = computed(() => {
   if (!props.mood) return props.date
-  return `${props.date} · ${props.mood.label}${props.mood.note ? ' · ' + props.mood.note : ''}`
+  const vents = props.mood.vents || []
+  const ventPart = vents.length ? ` · ${vents.length} 条吐槽` : ''
+  return `${props.date} · ${props.mood.label}${props.mood.note ? ' · ' + props.mood.note : ''}${ventPart}`
 })
 
 function onClick(event) {

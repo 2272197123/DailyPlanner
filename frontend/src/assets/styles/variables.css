@@ -49,6 +49,8 @@
   --glass-bg: rgba(255, 255, 255, 0.72);
   --glass-border: rgba(255, 255, 255, 0.45);
   --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+  /* 移动端去掉 backdrop-filter 后的替代实色（观感接近、避免滚动全屏重绘） */
+  --glass-bg-solid: rgba(255, 255, 255, 0.94);
 
   /* ── Surface colors ── */
   --bg: #faf8f5;
@@ -153,6 +155,8 @@
   --glass-bg: rgba(24, 25, 33, 0.78);
   --glass-border: rgba(255, 255, 255, 0.09);
   --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  /* 移动端去 blur 替代实色（dark） */
+  --glass-bg-solid: rgba(24, 25, 33, 0.94);
 
   /* ── Surface colors (dark) ── */
   --bg: #12131a;

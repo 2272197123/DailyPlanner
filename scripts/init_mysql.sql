@@ -68,6 +68,17 @@ CREATE TABLE IF NOT EXISTS moods (
     INDEX idx_moods_user_date (user_id, date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 心情吐槽（多条/天，颜色混合成当日心情色）
+CREATE TABLE IF NOT EXISTS mood_vents (
+    id          INT PRIMARY KEY AUTO_INCREMENT,
+    user_id     INT NOT NULL,
+    date        VARCHAR(10) NOT NULL,
+    text        TEXT,
+    color       VARCHAR(7) NOT NULL DEFAULT '#9ca3af',
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_mood_vents_user_date (user_id, date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 记账
 CREATE TABLE IF NOT EXISTS ledger (
     id          INT PRIMARY KEY AUTO_INCREMENT,

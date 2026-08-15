@@ -3,6 +3,16 @@ import api from '@/api/client'
 import { useScheduleStore } from '@/stores/schedule'
 import { useRoutineStore } from '@/stores/routines'
 import { useCurrencyStore } from '@/stores/currency'
+import { useMoodStore } from '@/stores/mood'
+import { hexToHsl } from '@/utils/color'
+
+/* 由色相推出冷暖倾向（帮助 AI 判断情绪效价，不硬编码心情标签） */
+function colorTendency(hex) {
+  const h = hexToHsl(hex).h
+  if (h < 70 || h >= 330) return '偏暖'
+  if (h >= 150 && h < 300) return '偏冷'
+  return '中性'
+}
 
 export const useArchiveStore = defineStore('archive', {
   state: () => ({
@@ -105,10 +115,23 @@ export const useArchiveStore = defineStore('archive', {
       const doneRoutines = (routines || []).filter(r => routineProgress && routineProgress[r.id])
       const undoneRoutines = (routines || []).filter(r => !routineProgress || !routineProgress[r.id])
 
+      /* 当日心情吐槽：每条一行（文本 + 冷暖倾向）；无吐槽则整段省略。
+         心情标签非默认（'一般'）时一并附上 */
+      const moodStore = useMoodStore()
+      const vents = moodStore.getVents(date)
+      const moodLabel = moodStore.getEntry(date)?.label
+      const ventLines = []
+      if (vents.length) {
+        ventLines.push('当日心情吐槽：')
+        if (moodLabel && moodLabel !== '一般') ventLines.push(`  当日心情：${moodLabel}`)
+        vents.forEach(v => ventLines.push(`  · ${v.text}（${colorTendency(v.color)}）`))
+      }
+
       const userPrompt = [
         `日期：${date}`,
         `用户自评：${feedback || '(无)'}`,
         `评分：${'★'.repeat(rating || 0)}${'☆'.repeat(5 - (rating || 0))}`,
+        ...(ventLines.length ? ['', ...ventLines] : []),
         '',
         '已完成任务：',
         ...doneBlocks.map(b => `  ✓ ${b.subject} (${b.duration}min)${b.note ? ' — ' + b.note : ''}`),

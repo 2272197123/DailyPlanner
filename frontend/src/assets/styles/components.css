@@ -169,6 +169,15 @@
   box-shadow: var(--glass-shadow);
 }
 
+/* 移动端去 blur：实色底保持观感，避免滚动滤镜重绘 */
+@media (max-width: 768px) {
+  .card-glass {
+    background: var(--glass-bg-solid);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
 /* ── Section headers ── */
 .section-header {
   display: flex;

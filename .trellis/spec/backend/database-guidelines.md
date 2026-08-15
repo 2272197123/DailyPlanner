@@ -21,8 +21,17 @@ DBInterface (abstract base)
 - Backtick `` `col` `` → SQLiteDB strips, PostgreSQLDB: `"col"`
 - `INSERT IGNORE` → SQLiteDB: `INSERT OR IGNORE`
 - `ON DUPLICATE KEY UPDATE` → SQLiteDB/PostgreSQLDB: `ON CONFLICT ... DO UPDATE`
+- `NOW()` → SQLiteDB: `datetime('now','localtime')`; PostgreSQLDB: kept as-is
 - `MEDIUMTEXT` → PostgreSQLDB: `TEXT`
 - `TINYINT` → PostgreSQLDB: `SMALLINT`
+
+### PostgreSQL conflict-key inference pitfall (08-15)
+
+PostgreSQLDB's `_pg_sql` infers the `ON CONFLICT (...)` target by matching the table
+name in the SQL string against a hardcoded list. **Any new table whose write path uses
+`ON DUPLICATE KEY UPDATE` MUST be registered in `_pg_sql`** — otherwise PG emits raw
+MySQL syntax and fails at runtime. (08-15: `moods` was missing from the list, which
+silently broke `save_mood` on PG; fixed when `mood_vents` was added.)
 
 ## Critical SQLite Pitfalls
 
@@ -38,7 +47,7 @@ DBInterface (abstract base)
 
 3. **`INSERT IGNORE`** → auto-converted to `INSERT OR IGNORE`
 
-## Tables (10)
+## Tables (core)
 
 | Table | PK | Purpose |
 |-------|-----|---------|
@@ -52,6 +61,10 @@ DBInterface (abstract base)
 | `ai_chat_history` | `(id, chat_date)` | v9.0 AI chat history per-date (messages JSON + summary) |
 | `users` | `id` SERIAL/INTEGER | User accounts (username UNIQUE + password_hash) |
 | `ai_requests` | `id` SERIAL/INTEGER | AI request logs |
+| `moods` | `(user_id, date)` | One mood row per day (color/label/note/intensity); `color` = blended vent color when vents exist |
+| `mood_vents` | `id` AUTO | 08-15: multiple vent entries per day, each `{text, color}`; day color = linear-RGB blend (`_blend_colors` / frontend `mixColors` must stay identical) |
+
+(Also: `ledger`, `email_codes`, `admin_actions`, `invite_codes` — see `_init_schema`.)
 
 ## v9.0 New Tables
 

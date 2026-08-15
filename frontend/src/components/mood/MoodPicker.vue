@@ -1,6 +1,8 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useMoodStore, MOOD_PRESETS } from '@/stores/mood'
+import { useToastStore } from '@/stores/toast'
+import VentComposer from './VentComposer.vue'
 
 const props = defineProps({
   date: { type: String, required: true },
@@ -10,6 +12,18 @@ const props = defineProps({
 const emit = defineEmits(['close', 'save', 'delete'])
 
 const moodStore = useMoodStore()
+const toastStore = useToastStore()
+
+/* 当日吐槽（多条混色）：补记入口，年历/侧栏格子点开都能写 */
+const vents = computed(() => moodStore.getVents(props.date))
+
+async function removeVentItem(vent) {
+  try {
+    await moodStore.removeVent(props.date, vent.id)
+  } catch {
+    toastStore.err('删除失败，请稍后重试')
+  }
+}
 
 const selectedColor = ref(props.mood?.color || MOOD_PRESETS[0].color)
 const selectedLabel = ref(props.mood?.label || MOOD_PRESETS[0].label)
@@ -134,6 +148,18 @@ function addCustomPreset() {
           placeholder="今天发生了什么？"
           rows="3"
         ></textarea>
+      </div>
+
+      <div class="picker-section">
+        <div class="section-label">心情药剂（多条吐槽混色）</div>
+        <div v-if="vents.length" class="picker-vents">
+          <div v-for="v in vents" :key="v.id" class="picker-vent">
+            <span class="picker-vent-dot" :style="{ backgroundColor: v.color }"></span>
+            <span class="picker-vent-text">{{ v.text }}</span>
+            <button class="picker-vent-del" title="删除这条吐槽" @click="removeVentItem(v)">×</button>
+          </div>
+        </div>
+        <VentComposer :date="date" />
       </div>
 
       <div class="picker-actions">
@@ -326,5 +352,52 @@ function addCustomPreset() {
 
 .actions-spacer {
   flex: 1;
+}
+
+/* ── 心情药剂（多条吐槽）── */
+.picker-vents {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.picker-vent {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--bg-muted);
+}
+
+.picker-vent-dot {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+}
+
+.picker-vent-text {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.picker-vent-del {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-full);
+  color: var(--text-muted);
+  line-height: 1;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.picker-vent-del:hover {
+  background: var(--danger-bg);
+  color: var(--danger);
 }
 </style>
