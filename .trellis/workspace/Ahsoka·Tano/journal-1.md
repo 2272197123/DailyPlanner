@@ -424,3 +424,24 @@ Root-caused the mood picker glitch: MoodPicker's root is `position: fixed` but w
 ### Status
 
 [OK] **Completed**
+
+
+## Session 15: 部署生产：主题开关+计划页/心情页性能优化上线
+
+**Date**: 2026-08-16
+**Task**: 部署生产：主题开关+计划页/心情页性能优化上线
+**Branch**: `master`
+
+### Summary
+
+将08-16三个任务的成果部署到生产（49.235.147.177）。部署方式变化：原SSH私钥未授权服务器，用户提供新私钥KeyForKimi.pem（项目根目录，已gitignore），登录用户为ubuntu（非root）。注意：本机Windows用户名含'·'导致OpenSSH默认路径解析失败，必须显式 -i 和 -o UserKnownHostsFile。流程：tar打包（排除.git/.trellis/.env/node_modules/server/static/data/KeyForKimi.pem）→ scp → 服务器备份到~/.bak-dailyplan-TS（不要放~/dailyplan内，cp -r会嵌套失败）→ 解压（.env保留）→ sudo docker compose up -d --build app。线上验证ALL PASS：front 200、新bundle（index-CzYk7gcu.css）；CSS标记确认ThemeToggle(.sun-moon)、wb-liquid移动端animation:none、curtain-stage display:none×2、ambient-orb display:none×2、is-today z-index:0、mood-picker-overlay移动端backdrop-filter:none+底色0.45；游客登录200、moods/plan/routines/plan-preset全200（API用Bearer token非cookie）。遗留：服务器~/.bak-dailyplan-*与~/dailyplan/.bak-*备份可定期清理。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `465feae..HEAD` | (see git log) |
+
+### Status
+
+[OK] **Completed**
