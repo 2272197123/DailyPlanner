@@ -75,3 +75,6 @@ desktop.ini
 
 # Trellis runtime (session-scoped ephemera)
 .trellis/.runtime/
+
+# SSH private key for deploy (never commit)
+KeyForKimi.pem

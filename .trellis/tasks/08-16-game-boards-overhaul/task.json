@@ -1,0 +1,32 @@
+{
+  "id": "game-boards-overhaul",
+  "name": "game-boards-overhaul",
+  "title": "游戏化改造与板块调整（恰饭/卡牌收集/任务卡美术/bug修复）",
+  "description": "父任务：bug修复(退XP/分针/AI存档) + 恰饭板块替换记账 + 任务卡美术重做 + 成就卡牌收集系统",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "Ahsoka·Tano",
+  "assignee": "Ahsoka·Tano",
+  "createdAt": "2026-08-16",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "master",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "08-16-fix-xp-refund-stardial",
+    "08-16-ai-review-persistence",
+    "08-16-chifan-board",
+    "08-16-task-card-art-redesign",
+    "08-16-card-collection-system"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
