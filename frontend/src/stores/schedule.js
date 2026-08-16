@@ -48,6 +48,45 @@ let _presetDirty = false       // 有待提交的预设快照
 const _dayVersion = reactive({}) // date → int：schedules/orderCfg/timelineCfg 变更即 +1
 const _timelineCache = {}        // date → { v, result, byId }（getComputedTimeline 缓存）
 
+/** 奖励金额存证：award 时记录实发金额，退款按存证退（不依赖 calcTaskReward 重算）。
+    持久化到 localStorage（earned 服务端只存 item_id 不存金额，刷新后从这里恢复）。
+    只保留近 AWARD_AMOUNTS_KEEP_DAYS 天：更早的退款回退到重算口径，防止无限增长 */
+const AWARD_AMOUNTS_KEY = 'dp_awardAmounts'
+const AWARD_AMOUNTS_KEEP_DAYS = 14
+
+function _pruneAwardAmounts(map) {
+  const cutoff = new Date(Date.now() - AWARD_AMOUNTS_KEEP_DAYS * 864e5).toISOString().slice(0, 10)
+  const out = {}
+  for (const date of Object.keys(map)) {
+    if (date >= cutoff && map[date] && Object.keys(map[date]).length) out[date] = map[date]
+  }
+  return out
+}
+
+function _loadAwardAmounts() {
+  try {
+    const raw = localStorage.getItem(AWARD_AMOUNTS_KEY)
+    const parsed = raw ? JSON.parse(raw) : {}
+    return (parsed && typeof parsed === 'object') ? _pruneAwardAmounts(parsed) : {}
+  } catch {
+    return {}
+  }
+}
+
+/* earn/refund 请求按条目串行：快速「完成→取消」交错时 fire-and-forget 的
+   POST/DELETE 到达服务端顺序不保证，DELETE 先到会让 earned 残留登记，
+   下次 fetchDay 把残留拉回 earnedToday → 再次完成不再发奖（余额与登记脱节）。
+   同一 (date,itemId) 的后一个请求等前一个落地后再发 */
+const _awardReqs = {} // `${date}/${itemId}` → 在飞请求 Promise 链尾
+
+function _queueAwardReq(date, itemId, send) {
+  const key = date + '/' + itemId
+  const prev = _awardReqs[key] || Promise.resolve()
+  const p = prev.then(() => send().catch(() => {}))
+  _awardReqs[key] = p
+  p.then(() => { if (_awardReqs[key] === p) delete _awardReqs[key] })
+}
+
 function _bumpDay(date) {
   _dayVersion[date] = (_dayVersion[date] || 0) + 1
 }
@@ -93,6 +132,7 @@ export const useScheduleStore = defineStore('schedule', {
     timelineCfg: {},        // { [date]: { start, order } }（legacy 本地缓存）
     orderCfg: {},           // { [date]: { start, order } } — 服务端 /order/{date} 为准
     earnedToday: {},        // { [date]: [itemId...] } — 当日已发放 XP 的条目（防刷分）
+    awardAmounts: _loadAwardAmounts(), // { [date]: { [itemId]: amount } } — 实发金额存证（退款口径）
     preset: null,           // 最近计划结构快照（v13：次日自动预填；服务端 /plan-preset 为准）
     recurringRules: [],     // 周期固定日程规则（v13：课表/班表；服务端 /recurring-rules 为准）
     loading: false
@@ -684,12 +724,47 @@ export const useScheduleStore = defineStore('schedule', {
     },
 
     /* ── XP 防刷分：每个条目每天只发一次（服务端幂等）── */
-    awardOnce(date, itemId) {
+    awardOnce(date, itemId, amount) {
       const earned = this.earnedToday[date] || []
       if (earned.includes(itemId)) return false
       this.earnedToday[date] = [...earned, itemId]
-      api.post(`/earned/${date}/${itemId}`).catch(() => {})
+      /* 金额存证：记录实发金额，退款按存证退——中途改 duration/priority 后
+         用 calcTaskReward 重算会对不上账 */
+      if (amount != null) {
+        this.awardAmounts[date] = { ...(this.awardAmounts[date] || {}), [itemId]: amount }
+        this._persistAwardAmounts()
+      }
+      _queueAwardReq(date, itemId, () => api.post(`/earned/${date}/${itemId}`))
       return true
+    },
+
+    /**
+     * 撤销发奖：移除 earnedToday 登记（保证再次完成可重新发奖）+ DELETE 服务端登记。
+     * 返回退款金额（存证优先，无存证用 fallbackAmount——兼容本特性上线前的旧发放）；
+     * 该条目当日未发过奖返回 null。
+     */
+    revokeAward(date, itemId, fallbackAmount = 0) {
+      const earned = this.earnedToday[date] || []
+      if (!earned.includes(itemId)) return null
+      this.earnedToday[date] = earned.filter(id => id !== itemId)
+      const map = this.awardAmounts[date]
+      const recorded = map ? map[itemId] : null
+      const amount = recorded != null ? recorded : fallbackAmount
+      if (map && recorded != null) {
+        const next = { ...map }
+        delete next[itemId]
+        this.awardAmounts[date] = next
+        this._persistAwardAmounts()
+      }
+      _queueAwardReq(date, itemId, () => api.delete(`/earned/${date}/${itemId}`))
+      return amount
+    },
+
+    _persistAwardAmounts() {
+      try {
+        this.awardAmounts = _pruneAwardAmounts(this.awardAmounts)
+        localStorage.setItem(AWARD_AMOUNTS_KEY, JSON.stringify(this.awardAmounts))
+      } catch { /* ignore */ }
     },
 
     /**

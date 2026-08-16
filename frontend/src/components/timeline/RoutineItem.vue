@@ -31,7 +31,7 @@ function handleToggle(event) {
 
   if (newState) {
     // 防刷分：同一 routine 每天只发一次 XP（服务端幂等）
-    if (scheduleStore.awardOnce(props.date, 'fixed_' + props.routine.id)) {
+    if (scheduleStore.awardOnce(props.date, 'fixed_' + props.routine.id, xpValue)) {
       currencyStore.addXP(xpValue, '完成固定事务: ' + props.routine.name)
       toastStore.ok('+' + xpValue + ' XP')
     } else {
@@ -41,8 +41,14 @@ function handleToggle(event) {
       burst(event.clientX, event.clientY, { count: 10 })
     }
   } else {
-    // 撤销完成：仅改状态，不发也不扣 XP
-    toastStore.warn('已撤销')
+    // 撤销完成：按存证金额退还 XP（无存证时回退固定值）
+    const refunded = scheduleStore.revokeAward(props.date, 'fixed_' + props.routine.id, xpValue)
+    if (refunded) {
+      currencyStore.subtractXP(refunded, '撤销固定事务: ' + props.routine.name)
+      toastStore.ok('-' + refunded + ' XP')
+    } else {
+      toastStore.warn('已撤销')
+    }
   }
 
   emit('toggle')

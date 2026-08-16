@@ -266,10 +266,6 @@ function onConfirm() {
 .sd-hand { opacity: 0.55; transition: opacity var(--duration-fast) var(--ease-out); }
 .sd-hand.active { opacity: 1; }
 
-.sd-min-hand {
-  transform-origin: 120px 120px;
-}
-
 .sd-hand-star {
   fill: #f5e3b3;
   font-size: 10px;
@@ -288,6 +284,8 @@ function onConfirm() {
 }
 
 .sd-time {
+  /* inline-block：snapPulse 缩放脉冲需要 transform，inline 元素不生效 */
+  display: inline-block;
   font-family: var(--font-data);
   font-size: var(--text-lg);
   font-weight: 700;

@@ -113,6 +113,7 @@ Columns:
 All in `server/db.py` (~800 LOC):
 `get_plan`, `save_plan`, `delete_plan`, `get_plans_list`, `get_progress`, `save_progress`,
 `get_routine_done`, `set_routine_done`, `get_state`, `set_state`, `get_earned`, `mark_earned`,
+`unmark_earned`,
 `save_archive`, `get_archive`, `list_archives`, `create_user`, `get_user_by_username`,
 `get_user_by_id`, `log_ai_request`, `get_ai_usage`,
 `save_day_data`, `get_day_data`, `save_chat_history`, `get_chat_history`.

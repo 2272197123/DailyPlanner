@@ -260,32 +260,47 @@ function handleToggleTask(blockId, event) {
   const date = scheduleStore.currentDate
   const completed = scheduleStore.toggleBlockDone(date, blockId)
   if (completed === undefined) return
+  const block = scheduleStore.todayBlocks.find(b => b.id === blockId)
   if (completed) {
-    const block = scheduleStore.todayBlocks.find(b => b.id === blockId)
     let reward = 0
     const r = block ? calcTaskReward(block) * 5 : 0
-    if (r && scheduleStore.awardOnce(date, 'block_' + blockId)) {
+    if (r && scheduleStore.awardOnce(date, 'block_' + blockId, r)) {
       reward = r
       currencyStore.addXP(r, '完成任务: ' + (block ? block.subject : blockId))
     }
     playCelebration(block, reward, event)
     maybeCelebrate()
+  } else {
+    // 取消完成：按存证金额退还 XP（无存证时回退重算，兼容旧发放）
+    const fallback = block ? calcTaskReward(block) * 5 : 0
+    const refunded = scheduleStore.revokeAward(date, 'block_' + blockId, fallback)
+    if (refunded) {
+      currencyStore.subtractXP(refunded, '取消完成: ' + (block ? block.subject : blockId))
+    }
   }
 }
 
 function handleToggleSubtask(blockId, si, event) {
   const date = scheduleStore.currentDate
+  const block = scheduleStore.todayBlocks.find(b => b.id === blockId)
   const result = scheduleStore.toggleSubtask(date, blockId, si)
-  if (result && result.allDone) {
-    const block = scheduleStore.todayBlocks.find(b => b.id === blockId)
+  if (!result) return
+  if (result.allDone) {
     let reward = 0
     const r = block ? calcTaskReward(block) * 5 : 0
-    if (r && scheduleStore.awardOnce(date, 'block_' + blockId)) {
+    if (r && scheduleStore.awardOnce(date, 'block_' + blockId, r)) {
       reward = r
       currencyStore.addXP(r, '完成所有子任务: ' + (block ? block.subject : blockId))
     }
     playCelebration(block, reward, event)
     maybeCelebrate()
+  } else {
+    // 子任务从全勾变为未全勾：整体奖励已发的要退还
+    const fallback = block ? calcTaskReward(block) * 5 : 0
+    const refunded = scheduleStore.revokeAward(date, 'block_' + blockId, fallback)
+    if (refunded) {
+      currencyStore.subtractXP(refunded, '取消完成: ' + (block ? block.subject : blockId))
+    }
   }
 }
 

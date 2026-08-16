@@ -28,7 +28,7 @@ from server.db import (
     get_ledger, list_ledger, create_ledger, update_ledger, delete_ledger,
     get_routine_done, set_routine_done,
     get_balance, set_balance,
-    is_earned, mark_earned, get_all_earned,
+    is_earned, mark_earned, unmark_earned, get_all_earned,
     get_state, set_state,
     save_archive, get_archive, list_archives,
     save_day_data, get_day_data,
@@ -598,6 +598,13 @@ async def api_get_earned(date: str, user: dict = Depends(require_user)):
 @app.post("/api/earned/{date}/{item_id}")
 async def api_mark_earned(date: str, item_id: str, user: dict = Depends(require_user)):
     mark_earned(user["user_id"], date, item_id)
+    return {"ok": True}
+
+
+@app.delete("/api/earned/{date}/{item_id}")
+async def api_unmark_earned(date: str, item_id: str, user: dict = Depends(require_user)):
+    # 幂等：重复删除不报错（DELETE 语义天然幂等）
+    unmark_earned(user["user_id"], date, item_id)
     return {"ok": True}
 
 

@@ -41,6 +41,13 @@ export const useCurrencyStore = defineStore('currency', {
       this.recordTransaction('earn', amount, reason)
     },
 
+    /** 退还 XP（取消完成）：流水记 refund，余额不得为负（clamp 到 0） */
+    subtractXP(amount, reason) {
+      this.balance = Math.max(0, this.balance - amount)
+      this._persist()
+      this.recordTransaction('refund', amount, reason)
+    },
+
     setBalance(value) {
       this.balance = Math.max(0, value)
       this._persist()

@@ -1554,6 +1554,16 @@ def mark_earned(user_id: int, date: str, item_id: str):
     db.commit()
 
 
+def unmark_earned(user_id: int, date: str, item_id: str):
+    """撤销已发放登记（取消完成退 XP 用）；DELETE 本身幂等，重复删除不报错"""
+    db = get_db()
+    db.execute(
+        "DELETE FROM earned WHERE user_id = %s AND date = %s AND item_id = %s",
+        (user_id, date, item_id),
+    )
+    db.commit()
+
+
 def get_all_earned(user_id: int, date: str) -> list[str]:
     db = get_db()
     rows = db.fetchall(
