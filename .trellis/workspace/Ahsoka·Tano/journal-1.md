@@ -445,3 +445,24 @@ Root-caused the mood picker glitch: MoodPicker's root is `position: fixed` but w
 ### Status
 
 [OK] **Completed**
+
+
+## Session 16: 游戏化改造：恰饭板块+卡牌收集+任务卡美术+bug修复（父任务5子任务）
+
+**Date**: 2026-08-17
+**Task**: 游戏化改造：恰饭板块+卡牌收集+任务卡美术+bug修复（父任务5子任务）
+**Branch**: `master`
+
+### Summary
+
+父任务08-16-game-boards-overhaul五个子任务全部完成。①fix-xp-refund-stardial：后端unmark_earned+DELETE /api/earned；前端awardAmounts金额存证（localStorage，14天窗口清理）+revokeAward+subtractXP(refund流水)+_queueAwardReq同键串行链（防DELETE先于POST到达）；分针修复=删StarDial残留transform-origin（SVG呈现属性被CSS origin包裹后绕(240,240)旋转）。②ai-review-persistence：loadReview读回（in-flight去重+本地写时间戳守卫）+checkAutoArchive到点自动存档（防重标记+失败回滚+watch isPublicPage登录后启动）+历史补档放开isPast+新建utils/dayDataMerge.js per-date Promise链串行化/day-data全部写方（archiveDay/deleteReview/routines._persistDaily）。③task-card-art-redesign：useCardTilt外层倾斜±6°+眩光（hover:hover+非reduced才注册监听、pointerType过滤、rAF合并、rect缓存）；翻面在内层tc-flip互不污染；左上角-45°优先级绶带（--danger/--warning/--success）。④chifan-board：dishes表三方言+76道seed幂等+CRUD接口；老虎机SlotMachine（anime translateY减速）+FoodCard翻面（ref-tricky-robin）+DishImage像素格占位+DishManager管理；抽取后addBlock钉时任务（中12:00/晚18:00可改，不污染orderCfg）；移除记账前端全部入口；终审修复生产/food未挂载（SPA回退返index.html）。⑤card-collection-system：server/cards.py 32卡（4系列×8：2N+3R+2SR+1SSR）权重N55/R27/SR13/SSR5、面值N1-10/R5-20/SR15-40/SSR30-100（secrets随机）；user_cards UNIQUE(user_id,source,source_id)幂等、checkins主键幂等+7天连签保底SR+、10成就惰性评估；游客清理级联三表；前端collection.js+CardFace（纯CSS稀有度边框+系列纹样+面值角落小字）+CardReveal分级揭示动效（SSR金粒子雨）+CollectionView收集页+Dashboard签到横幅；取消完成不退卡与XP退还完全隔离；终审修复CardCelebration.play()重入返回undefined致揭示被遮罩盖住（改返回进行中Promise）。图片：kimiwork生成12张1024px像素菜品图→PIL裁底部6%去AI生成水印+NEAREST缩256px入frontend/public/food/。e2e三轮全PASS；spec新增6条（award串行/金额存证/dayDataMerge/倾斜翻面分层/动画Promise重入/静态目录挂载）。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ee8b96c..46f50e5` | (see git log) |
+
+### Status
+
+[OK] **Completed**
