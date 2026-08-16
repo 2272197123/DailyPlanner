@@ -170,3 +170,45 @@ CREATE TABLE IF NOT EXISTS ai_requests (
     response_snippet    TEXT,
     created_at          DATETIME DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 恰饭菜品库（v15，全站共享，无 user_id；首版种子由应用启动时幂等写入）
+CREATE TABLE IF NOT EXISTS dishes (
+    id          VARCHAR(50) PRIMARY KEY,
+    name        VARCHAR(100) NOT NULL,
+    description TEXT,
+    price       DECIMAL(8,2) NOT NULL DEFAULT 0,
+    meal        VARCHAR(10) NOT NULL DEFAULT 'both',
+    category    VARCHAR(30) DEFAULT '家常',
+    image       VARCHAR(200) DEFAULT '',
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 卡牌掉落记录（v16；(user_id, source, source_id) 唯一 = 抽卡幂等键）
+CREATE TABLE IF NOT EXISTS user_cards (
+    id          INT PRIMARY KEY AUTO_INCREMENT,
+    user_id     INT NOT NULL,
+    card_id     VARCHAR(40) NOT NULL,
+    face_value  INT NOT NULL DEFAULT 1,
+    source      VARCHAR(20) NOT NULL DEFAULT 'task',
+    source_id   VARCHAR(100) NOT NULL DEFAULT '',
+    obtained_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_user_cards_src (user_id, source, source_id),
+    INDEX idx_user_cards_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 每日签到（v16；主键即幂等约束，连签 streak 冗余存储）
+CREATE TABLE IF NOT EXISTS checkins (
+    user_id     INT NOT NULL,
+    check_date  VARCHAR(10) NOT NULL,
+    streak      INT NOT NULL DEFAULT 1,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, check_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 用户成就（v16；惰性评估，达成时写入）
+CREATE TABLE IF NOT EXISTS user_achievements (
+    user_id         INT NOT NULL,
+    achievement_id  VARCHAR(40) NOT NULL,
+    achieved_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, achievement_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

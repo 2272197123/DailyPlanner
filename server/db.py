@@ -342,6 +342,53 @@ class SQLiteDB(DBInterface):
                 created_at      TEXT DEFAULT (datetime('now','localtime'))
             )
         """)
+        # v15: 恰饭菜品库（全站共享，无 user_id 隔离）
+        self.execute("""
+            CREATE TABLE IF NOT EXISTS dishes (
+                id          TEXT PRIMARY KEY,
+                name        TEXT NOT NULL,
+                description TEXT DEFAULT '',
+                price       REAL NOT NULL DEFAULT 0,
+                meal        TEXT NOT NULL DEFAULT 'both',
+                category    TEXT DEFAULT '家常',
+                image       TEXT DEFAULT '',
+                created_at  TEXT DEFAULT (datetime('now','localtime'))
+            )
+        """)
+        # v16: 卡牌收集系统（掉卡 / 签到 / 成就）
+        self.execute("""
+            CREATE TABLE IF NOT EXISTS user_cards (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id     INTEGER NOT NULL,
+                card_id     TEXT NOT NULL,
+                face_value  INTEGER NOT NULL DEFAULT 1,
+                source      TEXT NOT NULL DEFAULT 'task',
+                source_id   TEXT NOT NULL DEFAULT '',
+                obtained_at TEXT DEFAULT (datetime('now','localtime')),
+                UNIQUE (user_id, source, source_id)
+            )
+        """)
+        self.execute("""
+            CREATE INDEX IF NOT EXISTS idx_user_cards_user
+            ON user_cards (user_id)
+        """)
+        self.execute("""
+            CREATE TABLE IF NOT EXISTS checkins (
+                user_id     INTEGER NOT NULL,
+                check_date  TEXT NOT NULL,
+                streak      INTEGER NOT NULL DEFAULT 1,
+                created_at  TEXT DEFAULT (datetime('now','localtime')),
+                PRIMARY KEY (user_id, check_date)
+            )
+        """)
+        self.execute("""
+            CREATE TABLE IF NOT EXISTS user_achievements (
+                user_id         INTEGER NOT NULL,
+                achievement_id  TEXT NOT NULL,
+                achieved_at     TEXT DEFAULT (datetime('now','localtime')),
+                PRIMARY KEY (user_id, achievement_id)
+            )
+        """)
         self.commit()
 
 
@@ -631,6 +678,50 @@ class MySQLDB(DBInterface):
                 prompt_snippet      TEXT,
                 response_snippet    TEXT,
                 created_at          DATETIME DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """)
+        # v15: 恰饭菜品库（全站共享，无 user_id 隔离）
+        self.execute("""
+            CREATE TABLE IF NOT EXISTS dishes (
+                id          VARCHAR(50) PRIMARY KEY,
+                name        VARCHAR(100) NOT NULL,
+                description TEXT,
+                price       DECIMAL(8,2) NOT NULL DEFAULT 0,
+                meal        VARCHAR(10) NOT NULL DEFAULT 'both',
+                category    VARCHAR(30) DEFAULT '家常',
+                image       VARCHAR(200) DEFAULT '',
+                created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """)
+        # v16: 卡牌收集系统（掉卡 / 签到 / 成就）
+        self.execute("""
+            CREATE TABLE IF NOT EXISTS user_cards (
+                id          INT PRIMARY KEY AUTO_INCREMENT,
+                user_id     INT NOT NULL,
+                card_id     VARCHAR(40) NOT NULL,
+                face_value  INT NOT NULL DEFAULT 1,
+                source      VARCHAR(20) NOT NULL DEFAULT 'task',
+                source_id   VARCHAR(100) NOT NULL DEFAULT '',
+                obtained_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uk_user_cards_src (user_id, source, source_id),
+                INDEX idx_user_cards_user (user_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """)
+        self.execute("""
+            CREATE TABLE IF NOT EXISTS checkins (
+                user_id     INT NOT NULL,
+                check_date  VARCHAR(10) NOT NULL,
+                streak      INT NOT NULL DEFAULT 1,
+                created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, check_date)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """)
+        self.execute("""
+            CREATE TABLE IF NOT EXISTS user_achievements (
+                user_id         INT NOT NULL,
+                achievement_id  VARCHAR(40) NOT NULL,
+                achieved_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, achievement_id)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         """)
         self.commit()
@@ -975,6 +1066,53 @@ class PostgreSQLDB(DBInterface):
                 created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # v15: 恰饭菜品库（全站共享，无 user_id 隔离）
+        self.execute("""
+            CREATE TABLE IF NOT EXISTS dishes (
+                id          VARCHAR(50) PRIMARY KEY,
+                name        VARCHAR(100) NOT NULL,
+                description TEXT DEFAULT '',
+                price       NUMERIC(8,2) NOT NULL DEFAULT 0,
+                meal        VARCHAR(10) NOT NULL DEFAULT 'both',
+                category    VARCHAR(30) DEFAULT '家常',
+                image       VARCHAR(200) DEFAULT '',
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        # v16: 卡牌收集系统（掉卡 / 签到 / 成就）
+        self.execute("""
+            CREATE TABLE IF NOT EXISTS user_cards (
+                id          SERIAL PRIMARY KEY,
+                user_id     INTEGER NOT NULL,
+                card_id     VARCHAR(40) NOT NULL,
+                face_value  INT NOT NULL DEFAULT 1,
+                source      VARCHAR(20) NOT NULL DEFAULT 'task',
+                source_id   VARCHAR(100) NOT NULL DEFAULT '',
+                obtained_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (user_id, source, source_id)
+            )
+        """)
+        self.execute("""
+            CREATE INDEX IF NOT EXISTS idx_user_cards_user
+            ON user_cards (user_id)
+        """)
+        self.execute("""
+            CREATE TABLE IF NOT EXISTS checkins (
+                user_id     INTEGER NOT NULL,
+                check_date  VARCHAR(10) NOT NULL,
+                streak      INT NOT NULL DEFAULT 1,
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, check_date)
+            )
+        """)
+        self.execute("""
+            CREATE TABLE IF NOT EXISTS user_achievements (
+                user_id         INTEGER NOT NULL,
+                achievement_id  VARCHAR(40) NOT NULL,
+                achieved_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, achievement_id)
+            )
+        """)
         self.commit()
 
 
@@ -1004,6 +1142,7 @@ def get_db() -> DBInterface:
     _db.connect()
     _db.init_tables()
     _run_migrations(_db)
+    _seed_dishes(_db)
     return _db
 
 
@@ -1486,6 +1625,196 @@ def delete_ledger(user_id: int, entry_id: int) -> bool:
     return cur.rowcount > 0
 
 
+# ── 恰饭菜品库（v15，全站共享，非 per-user）──
+
+# 首版种子菜品：(name, description, price, meal, category, image)
+# image 对应 frontend/public/food/ 下的文件名；留空则前端显示像素占位图
+_DISH_SEED = [
+    # 家常
+    ("番茄炒蛋", "国民下饭菜，酸甜开胃，五分钟出锅", 18, "both", "家常", "tomato-egg.png"),
+    ("青椒土豆丝", "脆爽酸辣，家常快手菜之首", 15, "both", "家常", ""),
+    ("红烧茄子", "软糯入味，酱汁拌饭一绝", 20, "both", "家常", ""),
+    ("蒜蓉西兰花", "清淡爽口，蒜香提味", 22, "both", "家常", ""),
+    ("可乐鸡翅", "甜咸适口，酱汁浓郁，老少皆宜", 32, "both", "家常", ""),
+    ("红烧肉", "肥而不腻，入口即化的硬菜", 38, "dinner", "家常", ""),
+    ("清蒸鲈鱼", "鲜嫩少刺，葱油激香", 45, "dinner", "家常", ""),
+    ("番茄牛腩煲", "汤汁浓郁，牛腩软烂", 42, "dinner", "家常", ""),
+    ("冬瓜排骨汤", "清淡滋补，夏日解腻", 28, "both", "家常", ""),
+    ("韭菜炒蛋", "鲜香快手，下饭下面两相宜", 16, "both", "家常", ""),
+    ("干煸豆角", "干香微辣，越嚼越香", 22, "both", "家常", ""),
+    ("干锅花菜", "焦香锅气足，五花肉提味", 28, "both", "家常", ""),
+    # 川湘
+    ("麻婆豆腐", "麻辣鲜香烫嫩酥，川菜门面担当", 22, "both", "川湘", "mapo-tofu.png"),
+    ("宫保鸡丁", "糊辣荔枝口，花生米是灵魂", 28, "both", "川湘", "kungpao-chicken.png"),
+    ("水煮鱼", "麻辣滚烫，鱼片滑嫩", 48, "dinner", "川湘", ""),
+    ("回锅肉", "灯盏窝造型，豆瓣酱香浓郁", 32, "both", "川湘", ""),
+    ("辣子鸡", "辣椒堆里找鸡丁，外酥里嫩", 36, "both", "川湘", ""),
+    ("鱼香肉丝", "无鱼有鱼香，酸甜微辣", 26, "both", "川湘", ""),
+    ("毛血旺", "鸭血毛肚一锅麻辣", 45, "dinner", "川湘", ""),
+    ("口水鸡", "麻辣鲜香嫩，凉菜天花板", 30, "both", "川湘", ""),
+    ("剁椒鱼头", "鲜辣剁椒，汤汁拌面绝配", 42, "dinner", "川湘", ""),
+    ("小炒黄牛肉", "湘味猛火快炒，香辣下饭", 38, "both", "川湘", ""),
+    ("酸辣粉", "酸辣过瘾，红薯粉滑溜", 16, "lunch", "川湘", ""),
+    ("重庆火锅", "牛油红汤九宫格，越煮越香", 88, "dinner", "川湘", "hotpot.png"),
+    ("夫妻肺片", "麻辣红油凉拌，口感丰富", 32, "both", "川湘", ""),
+    # 粤式
+    ("白切鸡", "皮爽肉滑，原汁原味蘸姜蓉", 35, "both", "粤式", ""),
+    ("蜜汁叉烧", "蜜汁焦香，肥瘦相间", 38, "both", "粤式", ""),
+    ("煲仔饭", "锅巴焦香，腊味油润", 28, "lunch", "粤式", ""),
+    ("虾饺皇", "皮薄馅大，整虾爽口", 26, "lunch", "粤式", ""),
+    ("小笼包", "皮薄汁多，先开窗后喝汤", 18, "lunch", "粤式", "xiaolongbao.png"),
+    ("鲜虾肠粉", "滑嫩米皮裹鲜虾，豉油提鲜", 14, "lunch", "粤式", ""),
+    ("烧鹅饭", "皮脆肉嫩，梅子酱解腻", 32, "lunch", "粤式", ""),
+    ("老火靓汤", "文火慢炖四小时，润到心里", 25, "both", "粤式", ""),
+    ("干炒牛河", "镬气十足，牛肉滑嫩河粉爽", 26, "both", "粤式", ""),
+    ("豉汁蒸排骨", "豉香浓郁，早茶必点", 34, "both", "粤式", ""),
+    # 日韩
+    ("寿司拼盘", "三文鱼金枪鱼甜虾一次集齐", 45, "both", "日韩", "sushi-set.png"),
+    ("咖喱鸡饭", "日式咖喱浓醇微甜，拌饭神器", 28, "both", "日韩", "curry-rice.png"),
+    ("豚骨拉面", "浓白汤底，叉烧溏心蛋标配", 32, "both", "日韩", ""),
+    ("韩式拌饭", "石锅滋滋响，辣酱拌万物", 26, "both", "日韩", ""),
+    ("照烧鸡腿饭", "照烧汁甜咸亮泽，鸡肉多汁", 30, "lunch", "日韩", ""),
+    ("韩式炸鸡", "甜辣酱裹酥脆外壳", 38, "dinner", "日韩", ""),
+    ("味噌汤定食", "一汁一菜，清淡暖胃", 24, "lunch", "日韩", ""),
+    ("寿喜烧", "甜酱油涮牛肉，蘸生蛋液", 58, "dinner", "日韩", ""),
+    ("章鱼小丸子", "外脆内软，木鱼花会跳舞", 18, "both", "日韩", ""),
+    ("天妇罗拼盘", "面衣轻薄酥脆，虾蔬双拼", 36, "dinner", "日韩", ""),
+    # 面食
+    ("红烧牛肉面", "大块牛肉炖到酥烂，汤头浓", 26, "both", "面食", "beef-noodles.png"),
+    ("兰州拉面", "一清二白三红四绿，现拉现煮", 18, "both", "面食", "lamian.png"),
+    ("老北京炸酱面", "六必居黄酱，菜码齐全", 20, "both", "面食", ""),
+    ("油泼面", "热油泼辣子，香气炸开", 18, "both", "面食", ""),
+    ("武汉热干面", "芝麻酱浓香，拌酸豆角", 12, "lunch", "面食", ""),
+    ("刀削面", "中厚边薄，入口外滑内筋", 22, "both", "面食", ""),
+    ("鲜虾云吞面", "竹升面弹牙，云吞藏整虾", 24, "both", "面食", ""),
+    ("葱油拌面", "葱香酱香油香，简单至上", 14, "lunch", "面食", ""),
+    ("酸汤水饺", "酸辣汤头，饺子吸饱汤汁", 20, "both", "面食", ""),
+    ("西安凉皮", "酸辣爽滑，配冰峰肉夹馍", 12, "lunch", "面食", ""),
+    # 快餐小吃
+    ("黄焖鸡米饭", "酱汁浓鸡块嫩，汤汁拌饭", 24, "lunch", "快餐", ""),
+    ("沙县鸡腿饭", "卤香鸡腿，实惠管饱", 20, "lunch", "快餐", ""),
+    ("麻辣烫", "自选荤素，麻辣过瘾", 25, "both", "快餐", ""),
+    ("煎饼果子", "薄脆咔嚓，酱香蛋香", 10, "lunch", "快餐", ""),
+    ("肉夹馍", "腊汁肉酥烂，白吉馍脆", 14, "lunch", "快餐", ""),
+    ("炸鸡汉堡套餐", "快乐水配炸鸡，罪恶但满足", 32, "lunch", "快餐", ""),
+    ("单人披萨", "芝士拉丝，一人食友好", 36, "both", "快餐", ""),
+    ("烤冷面", "酸甜酱香，加蛋加肠", 12, "both", "快餐", ""),
+    ("铁板炒饭", "铁板焦香，粒粒分明", 18, "lunch", "快餐", ""),
+    ("扬州炒饭", "金包银，虾仁火腿蛋齐活", 16, "both", "快餐", "fried-rice.png"),
+    # 硬菜
+    ("北京烤鸭", "枣木挂炉，皮酥肉嫩卷薄饼", 98, "dinner", "硬菜", "peking-duck.png"),
+    ("糖醋里脊", "外酥里嫩，糖醋汁亮红", 32, "both", "硬菜", "sweet-sour-pork.png"),
+    ("松鼠桂鱼", "花刀炸制，茄汁酸甜", 68, "dinner", "硬菜", ""),
+    ("孜然羊肉", "孜然辣椒爆炒，烧烤味上桌", 46, "dinner", "硬菜", ""),
+    ("蒜蓉粉丝蒸扇贝", "蒜香浓郁，粉丝吸汁", 42, "dinner", "硬菜", ""),
+    ("酸菜鱼", "酸菜开胃，鱼片嫩滑", 45, "dinner", "硬菜", ""),
+    ("三杯鸡", "一杯麻油一杯酱油一杯米酒", 36, "both", "硬菜", ""),
+    # 轻食
+    ("鸡胸肉沙拉", "低脂高蛋白，油醋汁清爽", 26, "lunch", "轻食", ""),
+    ("牛油果三明治", "绵密牛油果配溏心蛋", 22, "lunch", "轻食", ""),
+    ("酸奶水果碗", "无糖酸奶配当季水果", 18, "lunch", "轻食", ""),
+    ("藜麦时蔬碗", "全谷物轻负担，烤蔬菜暖香", 28, "lunch", "轻食", ""),
+]
+
+
+def _dish_dict(r: dict) -> dict:
+    return {
+        "id": r["id"],
+        "name": r["name"],
+        "description": r["description"] or "",
+        "price": float(r["price"]),
+        "meal": r["meal"],
+        "category": r["category"] or "家常",
+        "image": r["image"] or "",
+        "created_at": str(r.get("created_at") or ""),
+    }
+
+
+def _seed_dishes(db: DBInterface):
+    """菜品库为空时写入首版种子数据（幂等：行数不为 0 直接跳过）"""
+    row = db.fetchone("SELECT COUNT(*) AS cnt FROM dishes")
+    if row and row["cnt"]:
+        return
+    for i, (name, desc, price, meal, cat, image) in enumerate(_DISH_SEED, 1):
+        db.execute(
+            "INSERT INTO dishes (id, name, description, price, meal, category, image) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            (f"dish_{i:04d}", name, desc, price, meal, cat, image),
+        )
+    db.commit()
+
+
+def _clean_dish(d: dict) -> dict:
+    """字段收敛：裁剪长度，image 只允许安全文件名（防路径穿越）"""
+    image = str(d.get("image", "") or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9._-]*", image):
+        image = ""
+    meal = d.get("meal", "both")
+    if meal not in ("lunch", "dinner", "both"):
+        meal = "both"
+    return {
+        "name": str(d.get("name", "")).strip()[:60],
+        "description": str(d.get("description", "") or "").strip()[:300],
+        "price": max(0.0, min(99999.0, float(d.get("price", 0) or 0))),
+        "meal": meal,
+        "category": str(d.get("category", "家常") or "家常").strip()[:30],
+        "image": image[:200],
+    }
+
+
+def list_dishes(meal: str | None = None, max_price: float | None = None) -> list[dict]:
+    db = get_db()
+    sql = "SELECT * FROM dishes"
+    conds, params = [], []
+    if meal in ("lunch", "dinner"):
+        conds.append("(meal = 'both' OR meal = %s)")
+        params.append(meal)
+    if max_price is not None:
+        conds.append("price <= %s")
+        params.append(float(max_price))
+    if conds:
+        sql += " WHERE " + " AND ".join(conds)
+    sql += " ORDER BY category ASC, price ASC, id ASC"
+    return [_dish_dict(r) for r in db.fetchall(sql, tuple(params))]
+
+
+def create_dish(d: dict) -> dict:
+    db = get_db()
+    c = _clean_dish(d)
+    dish_id = "dish_" + secrets.token_hex(6)
+    db.execute(
+        "INSERT INTO dishes (id, name, description, price, meal, category, image) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+        (dish_id, c["name"], c["description"], c["price"], c["meal"], c["category"], c["image"]),
+    )
+    db.commit()
+    row = db.fetchone("SELECT * FROM dishes WHERE id = %s", (dish_id,))
+    return _dish_dict(row)
+
+
+def update_dish(dish_id: str, d: dict) -> dict | None:
+    """更新菜品；返回清洗后的最新行，不存在返回 None"""
+    db = get_db()
+    c = _clean_dish(d)
+    cur = db.execute(
+        "UPDATE dishes SET name = %s, description = %s, price = %s, meal = %s, "
+        "category = %s, image = %s WHERE id = %s",
+        (c["name"], c["description"], c["price"], c["meal"], c["category"], c["image"], dish_id),
+    )
+    db.commit()
+    if cur.rowcount <= 0:
+        return None
+    row = db.fetchone("SELECT * FROM dishes WHERE id = %s", (dish_id,))
+    return _dish_dict(row)
+
+
+def delete_dish(dish_id: str) -> bool:
+    db = get_db()
+    cur = db.execute("DELETE FROM dishes WHERE id = %s", (dish_id,))
+    db.commit()
+    return cur.rowcount > 0
+
+
 # ── 日常项 ──
 
 def get_routine_done(user_id: int, date: str) -> dict[str, bool]:
@@ -1887,7 +2216,8 @@ def delete_user(user_id: int):
     db = get_db()
     for tbl in ["plans", "progress", "routine_done", "earned", "state",
                 "archives", "day_data", "moods", "ledger",
-                "ai_chat_history", "ai_requests"]:
+                "ai_chat_history", "ai_requests",
+                "user_cards", "checkins", "user_achievements"]:
         db.execute(f"DELETE FROM {tbl} WHERE user_id = %s", (user_id,))
     db.execute(
         "DELETE FROM invite_codes WHERE created_by = %s OR used_by = %s",

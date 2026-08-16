@@ -15,17 +15,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from server import config, mailer
 from server.crypto import encrypt_secret, decrypt_secret
 from server.models import (
-    MoodEntry, VentEntry, LedgerEntry,
+    MoodEntry, VentEntry, LedgerEntry, DishEntry, CardDrawRequest,
     UserCreate, UserLogin, AuthResponse, TokenRefresh, AdminResetPassword,
     SendEmailCode, ProfileUpdate,
     # v13: AI 计划生成已下线（端点见下方注释块），模型保留以便后续升级
     # GeneratePlanRequest, GeneratePlanResponse,
+)
+from server.cards import (
+    card_defs_payload, draw_card, list_user_cards,
+    checkin_status, do_checkin, evaluate_achievements,
 )
 from server.db import (
     init_db, get_plan, save_plan, delete_plan, list_plans,
     get_progress, save_progress,
     get_mood, save_mood, delete_mood, list_moods, add_vent, delete_vent,
     get_ledger, list_ledger, create_ledger, update_ledger, delete_ledger,
+    list_dishes, create_dish, update_dish, delete_dish,
     get_routine_done, set_routine_done,
     get_balance, set_balance,
     is_earned, mark_earned, unmark_earned, get_all_earned,
@@ -559,6 +564,106 @@ async def api_delete_ledger(entry_id: int, user: dict = Depends(require_user)):
 
 
 # ═══════════════════════════════════════
+# 恰饭菜品库 API（v15，全站共享菜品库）
+# 预算过滤/餐次过滤由 query 参数完成；随机抽取在前端做
+# ═══════════════════════════════════════
+
+@app.get("/api/dishes")
+async def api_list_dishes(meal: str | None = None, maxPrice: float | None = None,
+                          user: dict = Depends(require_user)):
+    """菜品列表；meal=lunch|dinner 时含 'both' 菜品，maxPrice 过滤参考价上限"""
+    if meal is not None and meal not in ("lunch", "dinner"):
+        raise HTTPException(422, "meal 应为 lunch 或 dinner")
+    return {"ok": True, "data": list_dishes(meal, maxPrice)}
+
+
+@app.post("/api/dishes")
+async def api_create_dish(body: DishEntry, user: dict = Depends(require_user)):
+    dish = create_dish(body.model_dump())
+    return {"ok": True, "data": dish, "message": "已添加"}
+
+
+@app.put("/api/dishes/{dish_id}")
+async def api_update_dish(dish_id: str, body: DishEntry, user: dict = Depends(require_user)):
+    dish = update_dish(dish_id, body.model_dump())
+    if dish is None:
+        raise HTTPException(404, "无此菜品")
+    return {"ok": True, "data": dish, "message": "已更新"}
+
+
+@app.delete("/api/dishes/{dish_id}")
+async def api_delete_dish(dish_id: str, user: dict = Depends(require_user)):
+    deleted = delete_dish(dish_id)
+    if not deleted:
+        raise HTTPException(404, "无此菜品")
+    return {"ok": True, "message": "已删除"}
+
+
+# ═══════════════════════════════════════
+# 卡牌收集 API（v16：掉卡抽卡 / 每日签到 / 成就）
+# 随机全部在服务端（权重 + 面值）；幂等：draw 按 (source, sourceId)
+# 唯一约束防重，checkin 按 (user_id, check_date) 主键防重。
+# 成就惰性评估：掉卡 / 签到后检查，新达成随响应返回。
+# ═══════════════════════════════════════
+
+SOURCE_ID_RE = re.compile(r"^[A-Za-z0-9_:\-\.]+$")
+
+
+@app.post("/api/cards/draw")
+async def api_draw_card(body: CardDrawRequest, user: dict = Depends(require_user)):
+    """完成任务掉卡。source 仅开放 'task'；sourceId 为幂等键（前端：`{date}:{blockId}`）。
+    重复提交返回首次抽到的卡（duplicate=true），不重复发卡。"""
+    if body.source != "task":
+        raise HTTPException(422, "source 仅支持 task")
+    if not SOURCE_ID_RE.match(body.sourceId):
+        raise HTTPException(422, "sourceId 格式不合法")
+    card, dup = draw_card(user["user_id"], "task", body.sourceId)
+    _, newly = evaluate_achievements(user["user_id"])
+    return {"ok": True, "card": card, "duplicate": dup, "newAchievements": newly}
+
+
+@app.get("/api/cards")
+async def api_list_cards(user: dict = Depends(require_user)):
+    """我的收集：已获得的卡 + 完整卡牌定义库（前端渲染图鉴占位用）"""
+    return {
+        "ok": True,
+        "data": {
+            "cards": list_user_cards(user["user_id"]),
+            "defs": card_defs_payload(),
+        },
+    }
+
+
+@app.get("/api/checkin/status")
+async def api_checkin_status(user: dict = Depends(require_user)):
+    """签到状态：今日是否已签 / 连签天数 / 累计天数 / 近 7 天记录"""
+    return {"ok": True, "data": checkin_status(user["user_id"])}
+
+
+@app.post("/api/checkin")
+async def api_checkin(user: dict = Depends(require_user)):
+    """每日签到（幂等）。返回 streak + 奖励卡；连签满 7 的倍数天保底 SR+。"""
+    status, already = do_checkin(user["user_id"])
+    _, newly = evaluate_achievements(user["user_id"])
+    return {
+        "ok": True,
+        "already": already,
+        "streak": status["streak"],
+        "milestone": bool(status.get("milestone")),
+        "card": status.get("card"),
+        "newAchievements": newly,
+        "message": "今日已签到" if already else f"签到成功，连签 {status['streak']} 天",
+    }
+
+
+@app.get("/api/achievements")
+async def api_achievements(user: dict = Depends(require_user)):
+    """成就墙：惰性评估后返回全部成就（含进度/达成时间）"""
+    achievements, _ = evaluate_achievements(user["user_id"])
+    return {"ok": True, "data": achievements}
+
+
+# ═══════════════════════════════════════
 # 日常项完成状态 API
 # ═══════════════════════════════════════
 
@@ -907,6 +1012,11 @@ async def api_save_chat_history(date: str, body: dict, user: dict = Depends(requ
 _assets = STATIC_DIR / "assets"
 if _assets.exists():
     app.mount("/assets", StaticFiles(directory=str(_assets)), name="assets")
+# 恰饭菜品图（frontend/public/food/ 构建后拷入 server/static/food/）：
+# 不挂载会被 SPA 深链回退成 index.html，菜品图全部加载失败
+_food = STATIC_DIR / "food"
+if _food.exists():
+    app.mount("/food", StaticFiles(directory=str(_food)), name="food")
 AVATAR_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/avatars", StaticFiles(directory=str(AVATAR_DIR)), name="avatars")
 

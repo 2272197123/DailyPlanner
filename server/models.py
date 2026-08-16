@@ -101,6 +101,22 @@ class LedgerEntry(BaseModel):
     created_at: Optional[str] = None
 
 
+class DishEntry(BaseModel):
+    """恰饭菜品（全站共享菜品库）"""
+    name: str = Field(..., min_length=1, max_length=60)
+    description: str = Field("", max_length=300)
+    price: float = Field(0, ge=0, le=99999)
+    meal: str = "both"  # lunch / dinner / both
+    category: str = Field("家常", max_length=30)
+    image: str = Field("", max_length=200)
+
+
+class CardDrawRequest(BaseModel):
+    """抽卡请求（v16）：source 目前仅开放 'task'；sourceId 为客户端幂等键"""
+    source: str = Field("task", max_length=20)
+    sourceId: str = Field(..., min_length=1, max_length=100)
+
+
 class PrefsUpdate(BaseModel):
     waferSkin: str = "wafer"
     ownedSkins: list[str] = ["wafer"]
