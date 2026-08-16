@@ -4,7 +4,8 @@ import anime from 'animejs'
 import { useScheduleStore } from '@/stores/schedule'
 import { useToastStore } from '@/stores/toast'
 import { escapeHtml, fmtDuration, calcTaskReward } from '@/utils/format'
-import { CAT_EMOJI, PRI_LABELS } from '@/utils/constants'
+import { CAT_EMOJI } from '@/utils/constants'
+import { useCardTilt } from '@/composables/useCardTilt'
 import StarDial from '@/components/plan/StarDial.vue'
 import StarStrip from '@/components/plan/StarStrip.vue'
 import StarDateBar from '@/components/plan/StarDateBar.vue'
@@ -92,7 +93,9 @@ const doneCount = computed(() => (props.block.subtasks || []).filter(s => s.done
 const subPct = computed(() => subCount.value ? Math.round(doneCount.value / subCount.value * 100) : (props.block.completed ? 100 : 0))
 const xpReward = computed(() => calcTaskReward(props.block) * 5)
 const catEmoji = computed(() => CAT_EMOJI[props.block.category] || '📌')
-const priLabel = computed(() => PRI_LABELS[props.block.priority] || '')
+/* 优先级绶带文字（左上角斜角绶带取代原 tags 行优先级标签） */
+const PRI_SHORT = { high: '高', medium: '中', low: '低' }
+const priShort = computed(() => PRI_SHORT[props.block.priority] || '')
 const timelineTime = computed(() => props.block._startStr || '')
 const durationFmt = computed(() => fmtDuration(props.block.duration))
 
@@ -111,6 +114,14 @@ const dialTime = ref('09:00')
 let dialDirty = false // 用户真正拖过轮盘/拖杆才把 ✓完成 视为「应用时间」
 let flipping = false
 
+/* ═══ 3D 倾斜 + 眩光（倾斜作用于外层 .tc-tilt，翻面 rotateY 作用于内层
+       .tc-flip，互不污染；仅桌面 hover 设备启用，触屏/reduced-motion
+       不注册监听器 —— 见 useCardTilt） ═══ */
+const tiltRef = ref(null)
+const glareRef = ref(null)
+const tiltPaused = ref(false)
+const { resetTilt } = useCardTilt(tiltRef, glareRef, { paused: tiltPaused })
+
 /* 当日其他钉时块区间（星图拖杆磁吸避让用）：优先用 FlowTimeline 下发的 pinned prop，
    未下发时回落到 store 计算（getComputedTimeline 已 memoize，开销可控） */
 const otherPinned = computed(() => {
@@ -126,10 +137,13 @@ const otherPinned = computed(() => {
 function flipTo(showBack) {
   if (flipping) return
   flipping = true
+  tiltPaused.value = true // 翻面期间暂停倾斜并复位，避免与 rotateY 嵌套打架
+  resetTilt()
   const el = flipRef.value
   if (!el) {
     flipped.value = showBack
     flipping = false
+    tiltPaused.value = showBack // 背面展示期间保持暂停
     return
   }
   anime({
@@ -148,6 +162,7 @@ function flipTo(showBack) {
           complete: () => {
             el.style.transform = '' // 清掉残留 transform，避免成为 fixed 后代包含块
             flipping = false
+            tiltPaused.value = showBack
           }
         })
       })
@@ -244,10 +259,16 @@ function handleDelete() {
       <div class="ctp-dot" :class="{ pulsing: !block.completed }"></div>
     </div>
 
+    <!-- 3D 倾斜外层（transform 由 useCardTilt 直写；翻面在子层 .tc-flip 上进行） -->
+    <div class="tc-tilt" ref="tiltRef">
     <!-- 翻面容器（rotateY 90° 中缝换面，避免双面 absolute 高度同步问题） -->
     <div class="tc-flip" ref="flipRef">
       <!-- Card body（整卡点击切换完成；内部交互区均已 @click.stop） -->
-      <div v-if="!flipped" class="card-body" @click="emit('toggle', block.id, $event)">
+      <div v-if="!flipped" class="card-body" :class="{ 'has-ribbon': priShort }" @click="emit('toggle', block.id, $event)">
+        <!-- 左上角优先级绶带（斜 45° 角标，高/中/低三色） -->
+        <span v-if="priShort" class="pri-ribbon" :class="'pri-' + block.priority">{{ priShort }}</span>
+        <!-- 眩光层（radial-gradient 高光跟随鼠标，transform 由 useCardTilt 直写） -->
+        <div class="tc-glare" ref="glareRef"></div>
         <!-- 时间主标题：大号等宽，点击进入星轨轮盘 -->
         <div class="card-time-head" @click.stop="openFlip" title="点击设置时间">
           <span class="cth-time">
@@ -272,10 +293,9 @@ function handleDelete() {
           </div>
         </div>
 
-        <!-- Tags row -->
-        <div class="card-tags" v-if="block.category || block.priority || block.goalId">
+        <!-- Tags row（优先级已移至左上角绶带，不再占 tags 位） -->
+        <div class="card-tags" v-if="block.category || block.goalId">
           <span class="ct-tag ct-cat">{{ catEmoji }} {{ block.category || 'other' }}</span>
-          <span class="ct-tag ct-pri" v-if="priLabel">{{ priLabel }}</span>
           <span class="ct-tag ct-goal" v-if="block.goalId">{{ block.phase || '目标' }}</span>
         </div>
 
@@ -329,6 +349,7 @@ function handleDelete() {
         <StarDial v-model="dialTime" @update:model-value="dialDirty = true" @pin="pinTime" @unpin="unpinTime" @confirm="confirmFlip" />
         <StarStrip v-model="dialTime" :pinned="otherPinned" @update:model-value="dialDirty = true" />
       </div>
+    </div>
     </div>
 
     <!-- Inline edit overlay（fixed 元素 → Teleport body，避免被翻面 transform 截断） -->
@@ -442,10 +463,44 @@ function handleDelete() {
 .state-past .ctp-dot { background: var(--state-past); }
 .state-future .ctp-dot { background: var(--state-future); }
 
-/* ── 翻面容器 ── */
-.tc-flip {
+/* ── 3D 倾斜外层（transform 由 useCardTilt 直写，勿在此加静态 transform） ── */
+.tc-tilt {
   flex: 1;
   min-width: 0;
+  position: relative;
+  z-index: 0; /* 配合 ::before 光环 z-index:-1，防逃逸到祖先层叠上下文 */
+  perspective: 900px; /* 给内层 .tc-flip 的翻面 rotateY 提供景深 */
+  transition: transform 320ms var(--ease-out); /* 离开/复位时长回弹 */
+}
+
+/* 跟手期间缩短过渡，90ms 平滑跟随鼠标（参照 tracker 的 125ms 观感） */
+.tc-tilt.tilting {
+  transition-duration: 90ms;
+}
+
+/* 悬停光效（参照 odd-fly）：卡片背后的主题色模糊光环，仅 opacity 过渡，
+   非常驻动画；仅在可 hover 设备创建该层（移动端零开销） */
+@media (hover: hover) {
+  .tc-tilt::before {
+    content: '';
+    position: absolute;
+    inset: 4px;
+    border-radius: var(--radius-lg);
+    background: var(--accent);
+    opacity: 0;
+    filter: blur(20px);
+    z-index: -1;
+    pointer-events: none;
+    transition: opacity var(--duration-slow) var(--ease-out);
+  }
+
+  .tc-tilt:hover::before {
+    opacity: 0.32;
+  }
+}
+
+/* ── 翻面容器 ── */
+.tc-flip {
   perspective: 900px;
   transform-style: preserve-3d;
   backface-visibility: hidden;
@@ -461,6 +516,7 @@ function handleDelete() {
   transition: all var(--duration-normal) var(--ease-out);
   position: relative;
   cursor: pointer;
+  overflow: hidden; /* 裁切左上角绶带与眩光层到圆角卡形 */
 }
 
 .card-body:hover {
@@ -475,6 +531,56 @@ function handleDelete() {
 .card-completed .card-title {
   text-decoration: line-through;
   color: var(--text-muted);
+}
+
+/* ── 眩光层：200% 尺寸居中，JS 只写 transform（无 transition 即时跟随），
+      显隐走 opacity 过渡；非 hover 设备 useCardTilt 不加 .tilting，恒透明 ── */
+.tc-glare {
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  pointer-events: none;
+  background: radial-gradient(circle at center,
+    rgba(255, 255, 255, 0.22) 0%,
+    rgba(255, 255, 255, 0.06) 35%,
+    rgba(255, 255, 255, 0) 60%);
+  opacity: 0;
+  transition: opacity var(--duration-normal) var(--ease-out);
+  z-index: 2; /* 光晕覆在内容上的"掠光"观感 */
+}
+
+.tc-tilt.tilting .tc-glare {
+  opacity: 1;
+}
+
+/* ── 优先级绶带（参照 massive-earwig 角标：overflow:hidden 卡片 + 角落 -45° 条带） ── */
+.pri-ribbon {
+  position: absolute;
+  top: 10px;
+  left: -26px;
+  width: 88px;
+  height: 20px;
+  line-height: 20px;
+  text-align: center;
+  transform: rotate(-45deg);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--on-accent, #fff);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35); /* 亮暗主题下文字都清晰 */
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  z-index: 1;
+  pointer-events: none; /* 不挡整卡点击切换完成 */
+}
+
+.pri-high { background: var(--danger); }
+.pri-medium { background: var(--warning); }
+.pri-low { background: var(--success); }
+
+/* 绶带斜带占据左上角三角区（最深约 x+y≤52px），时间主标题右移避让 */
+.card-body.has-ribbon .card-time-head {
+  padding-left: 34px;
 }
 
 /* ── 时间主标题（大号等宽 + 钉时/流动徽章） ── */
@@ -618,7 +724,6 @@ function handleDelete() {
 }
 
 .ct-cat { background: var(--bg-muted); color: var(--text-secondary); }
-.ct-pri { background: var(--warning-bg); color: var(--warning); }
 .ct-goal { background: var(--accent-muted); color: var(--accent); }
 
 /* ── Note ── */
