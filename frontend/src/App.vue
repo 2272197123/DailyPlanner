@@ -9,12 +9,12 @@ import { useAiStore } from '@/stores/ai'
 import { useMoodStore } from '@/stores/mood'
 import { useScheduleStore } from '@/stores/schedule'
 import { useGoalStore } from '@/stores/goals'
-import { useAccountingStore } from '@/stores/accounting'
 import { useRoutineStore } from '@/stores/routines'
 import { useToastStore } from '@/stores/toast'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AiDrawer from '@/components/ai/AiDrawer.vue'
 import ToastContainer from '@/components/shared/ToastContainer.vue'
+import CardReveal from '@/components/collection/CardReveal.vue'
 
 const currencyStore = useCurrencyStore()
 const themeStore = useThemeStore()
@@ -23,7 +23,6 @@ const aiStore = useAiStore()
 const moodStore = useMoodStore()
 const scheduleStore = useScheduleStore()
 const goalStore = useGoalStore()
-const accountingStore = useAccountingStore()
 const routineStore = useRoutineStore()
 const toastStore = useToastStore()
 
@@ -40,7 +39,6 @@ onMounted(() => {
   archiveStore.initFromCache()
   scheduleStore.initFromCache()
   goalStore.initFromCache()
-  accountingStore.initFromCache()
   routineStore.initFromCache()
   if (!isPublicPage.value) {
     moodStore.fetchMoods()
@@ -134,6 +132,8 @@ onBeforeUnmount(() => {
     <template v-if="!isPublicPage">
       <AiDrawer />
     </template>
+    <!-- 掉卡/签到 新卡揭示 + 成就祝贺（全局单例，消费 collection.revealQueue） -->
+    <CardReveal v-if="!isPublicPage" />
     <ToastContainer />
   </div>
 </template>

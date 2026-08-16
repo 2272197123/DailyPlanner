@@ -31,7 +31,8 @@ const navItems = computed(() => {
   const items = [
     { name: 'dashboard', title: '总览', icon: '□' },
     { name: 'plan', title: '计划', icon: '☑' },
-    { name: 'ledger', title: '记账', icon: '¤' },
+    { name: 'chifan', title: '恰饭', icon: '🍜' },
+    { name: 'collection', title: '收集', icon: '🎴' },
     { name: 'mood', title: '心情', icon: '◉' },
     { name: 'news', title: '热点', icon: '✦' },
     { name: 'settings', title: '设置', icon: '⚙' }

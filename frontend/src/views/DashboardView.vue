@@ -3,18 +3,22 @@ import { computed, onMounted, ref } from 'vue'
 import { useScheduleStore } from '@/stores/schedule'
 import { useMoodStore } from '@/stores/mood'
 import { useCurrencyStore } from '@/stores/currency'
-import { useAccountingStore } from '@/stores/accounting'
 import { useNewsStore } from '@/stores/news'
 import { useGoalStore } from '@/stores/goals'
-import { toLocalDate, daysUntil } from '@/utils/format'
+import { useCollectionStore } from '@/stores/collection'
+import { useToastStore } from '@/stores/toast'
+import { useRouter } from 'vue-router'
+import { daysUntil } from '@/utils/format'
 import { useAnime } from '@/composables/useAnime'
 
 const scheduleStore = useScheduleStore()
 const moodStore = useMoodStore()
 const currencyStore = useCurrencyStore()
-const accountingStore = useAccountingStore()
 const newsStore = useNewsStore()
 const goalStore = useGoalStore()
+const collectionStore = useCollectionStore()
+const toastStore = useToastStore()
+const router = useRouter()
 const { staggerEnter } = useAnime()
 
 const mounted = ref(false)
@@ -25,15 +29,6 @@ const totalCount = computed(() => todayBlocks.value.length)
 const progress = computed(() => totalCount.value ? (completedCount.value / totalCount.value) * 100 : 0)
 const todayMood = computed(() => moodStore.todayMood)
 const balance = computed(() => currencyStore.balance || 0)
-
-/* ── 本月收支（真实记账数据）── */
-const monthSummary = computed(() => {
-  const month = toLocalDate(new Date()).slice(0, 7)
-  const entries = (accountingStore.entries || []).filter(e => e.date && e.date.startsWith(month))
-  const income = entries.filter(e => e.type === 'income').reduce((s, e) => s + (e.amount || 0), 0)
-  const expense = entries.filter(e => e.type === 'expense').reduce((s, e) => s + (e.amount || 0), 0)
-  return { income, expense }
-})
 
 /* ── 新闻热点（v13：来自服务端聚合的真实新闻流）── */
 const topNews = computed(() => {
@@ -56,6 +51,33 @@ const nextCountdown = computed(() => {
   return null
 })
 
+/* ── 每日签到入口（v16 收集系统）：未签点击即签（出卡走揭示动效），已签跳收集页 ── */
+const checkin = computed(() => collectionStore.checkin)
+
+async function handleCheckinBanner() {
+  if (checkin.value.todayChecked) {
+    router.push({ name: 'collection' })
+    return
+  }
+  const res = await collectionStore.checkinToday()
+  if (!res) {
+    toastStore.warn('签到失败，请稍后重试')
+    return
+  }
+  if (res.already) {
+    router.push({ name: 'collection' })
+    return
+  }
+  if (res.card) {
+    collectionStore.enqueueReveal({ card: res.card, achievements: res.newAchievements })
+  } else if ((res.newAchievements || []).length) {
+    collectionStore.enqueueReveal({ achievements: res.newAchievements })
+  }
+  toastStore.ok(res.milestone
+    ? `连签 ${res.streak} 天，里程碑保底 SR+ 已送达！`
+    : `签到成功，连签 ${res.streak} 天`)
+}
+
 const greeting = computed(() => {
   const hour = new Date().getHours()
   if (hour < 6) return '夜深了，注意休息'
@@ -67,9 +89,9 @@ const greeting = computed(() => {
 
 onMounted(() => {
   scheduleStore.fetchDay(scheduleStore.currentDate)
-  accountingStore.fetchEntries()
   newsStore.init()
   goalStore.fetchGoals()
+  collectionStore.fetchAll()
   mounted.value = true
   requestAnimationFrame(() => {
     staggerEnter('.dash-card', document.querySelector('.dashboard-view'))
@@ -114,12 +136,14 @@ onMounted(() => {
       </div>
 
       <div class="dash-card card">
-        <div class="card-icon">¤</div>
+        <div class="card-icon">🍜</div>
         <div class="card-meta">
-          <div class="card-value">¥{{ monthSummary.expense.toFixed(0) }}</div>
-          <div class="card-label">本月支出</div>
+          <div class="card-value">恰饭</div>
+          <div class="card-label">今天吃什么</div>
         </div>
-        <div class="card-hint">收入 ¥{{ monthSummary.income.toFixed(0) }} · 结余 ¥{{ (monthSummary.income - monthSummary.expense).toFixed(0) }}</div>
+        <div class="card-hint">
+          <router-link :to="{ name: 'chifan' }" class="chifan-link">预算抽菜 →</router-link>
+        </div>
       </div>
 
       <div class="dash-card card">
@@ -133,6 +157,28 @@ onMounted(() => {
             <span class="news-src">[{{ item.sourceName }}]</span> {{ item.title }}
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- 每日签到横幅（未签高亮提示，点击即签；已签点击进收集页） -->
+    <div
+      class="cd-banner card checkin-banner"
+      :class="{ unchecked: !checkin.todayChecked }"
+      role="button"
+      tabindex="0"
+      @click="handleCheckinBanner"
+      @keydown.enter="handleCheckinBanner"
+    >
+      <span class="cd-banner-icon">🎴</span>
+      <div class="cd-banner-info">
+        <span class="cd-banner-title">{{ checkin.todayChecked ? '今日已签到' : '每日签到' }}</span>
+        <span class="cd-banner-date">
+          {{ checkin.todayChecked ? `连签 ${checkin.streak} 天 · 查看收集` : '签到得卡牌 · 连签 7 天保底 SR+' }}
+        </span>
+      </div>
+      <div class="cd-banner-days">
+        <span class="cd-banner-num">{{ checkin.streak }}</span>
+        <span class="cd-banner-label">天连签</span>
       </div>
     </div>
 
@@ -169,9 +215,9 @@ onMounted(() => {
           <span class="quick-icon">◉</span>
           <span>记录心情</span>
         </router-link>
-        <router-link :to="{ name: 'ledger' }" class="quick-link">
-          <span class="quick-icon">¤</span>
-          <span>记一笔</span>
+        <router-link :to="{ name: 'chifan' }" class="quick-link">
+          <span class="quick-icon">🍜</span>
+          <span>今天吃什么</span>
         </router-link>
         <router-link :to="{ name: 'news' }" class="quick-link">
           <span class="quick-icon">✦</span>
@@ -306,6 +352,15 @@ onMounted(() => {
   color: var(--text-muted);
 }
 
+.chifan-link {
+  color: var(--accent);
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.chifan-link:hover {
+  opacity: 0.7;
+}
+
 .news-hint {
   display: flex;
   flex-direction: column;
@@ -346,6 +401,16 @@ onMounted(() => {
 }
 
 .cd-banner.today {
+  border-color: var(--accent);
+  background: var(--accent-muted);
+}
+
+/* 签到横幅：复用 cd-banner 结构；未签到时高亮引导 */
+.checkin-banner {
+  cursor: pointer;
+}
+
+.checkin-banner.unchecked {
   border-color: var(--accent);
   background: var(--accent-muted);
 }

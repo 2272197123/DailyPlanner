@@ -25,10 +25,16 @@ const routes = [
     meta: { title: '计划', icon: '☑', requiresAuth: true }
   },
   {
-    path: '/ledger',
-    name: 'ledger',
-    component: () => import('@/views/LedgerView.vue'),
-    meta: { title: '记账', icon: '¤', requiresAuth: true }
+    path: '/chifan',
+    name: 'chifan',
+    component: () => import('@/views/ChifanView.vue'),
+    meta: { title: '恰饭', icon: '🍜', requiresAuth: true }
+  },
+  {
+    path: '/collection',
+    name: 'collection',
+    component: () => import('@/views/CollectionView.vue'),
+    meta: { title: '收集', icon: '🎴', requiresAuth: true }
   },
   {
     path: '/mood',
