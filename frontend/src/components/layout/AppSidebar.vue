@@ -9,6 +9,7 @@ import { useAnime } from '@/composables/useAnime'
 import { toLocalDate } from '@/utils/format'
 import api from '@/api/client'
 import MoodPicker from '@/components/mood/MoodPicker.vue'
+import ThemeToggle from '@/components/ThemeToggle.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -157,12 +158,7 @@ watch(() => route.name, () => {
     @click="mobileOpen = true"
   >☰</button>
   <!-- 移动端：快捷白天/夜间切换（右上角，无需打开抽屉） -->
-  <button
-    class="mobile-theme-btn"
-    :title="themeStore.isDark ? '切换到白天模式' : '切换到夜间模式'"
-    :aria-label="themeStore.isDark ? '切换到白天模式' : '切换到夜间模式'"
-    @click="toggleThemeMode"
-  >{{ themeStore.isDark ? '☀' : '☾' }}</button>
+  <ThemeToggle class="mobile-theme-btn" @toggle="toggleThemeMode" />
   <div v-if="mobileOpen" class="sidebar-backdrop" @click="mobileOpen = false"></div>
 
   <aside class="app-sidebar" :class="{ collapsed, open: mobileOpen }">
@@ -172,11 +168,7 @@ watch(() => route.name, () => {
         <span v-if="!collapsed" class="brand-name">DailyPlan</span>
       </div>
       <div class="header-actions">
-        <button
-          class="collapse-btn"
-          :title="themeStore.isDark ? '切换到白天模式' : '切换到夜间模式'"
-          @click="toggleThemeMode"
-        >{{ themeStore.isDark ? '☀' : '☾' }}</button>
+        <ThemeToggle @toggle="toggleThemeMode" />
         <button class="collapse-btn" @click="collapsed = !collapsed" title="折叠/展开">
           {{ collapsed ? '»' : '«' }}
         </button>
@@ -285,8 +277,21 @@ watch(() => route.name, () => {
 }
 
 .app-sidebar.collapsed {
+  /* 横向 6px 内边距：内容宽 60px，恰好容纳主题开关 */
   width: 72px;
-  padding: var(--space-4) var(--space-3);
+  padding: var(--space-4) 6px;
+}
+
+/* 折叠态头部纵向堆叠，容纳 60px 宽的主题开关 */
+.app-sidebar.collapsed .sidebar-header {
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.app-sidebar.collapsed .header-actions {
+  flex-direction: column;
+  align-items: center;
 }
 
 .sidebar-header {
@@ -646,21 +651,13 @@ watch(() => route.name, () => {
   }
 
   .mobile-theme-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    /* ThemeToggle 组件根元素：固定定位即可，开关自身有完整滑轨底色，无需玻璃底盒 */
+    display: block;
     position: fixed;
-    top: var(--space-3);
+    /* 与 40px 高的汉堡按钮视觉垂直居中（开关高 34px，下移 3px） */
+    top: calc(var(--space-3) + 3px);
     right: var(--space-3);
     z-index: var(--z-sticky);
-    width: 40px;
-    height: 40px;
-    border-radius: var(--radius-md);
-    background: var(--glass-bg-solid);
-    border: 1px solid var(--glass-border);
-    box-shadow: var(--shadow-md);
-    color: var(--text-primary);
-    font-size: 1.1rem;
   }
 
   .sidebar-backdrop {
