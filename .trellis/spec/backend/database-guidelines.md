@@ -63,6 +63,12 @@ silently broke `save_mood` on PG; fixed when `mood_vents` was added.)
 | `ai_requests` | `id` SERIAL/INTEGER | AI request logs |
 | `moods` | `(user_id, date)` | One mood row per day (color/label/note/intensity); `color` = blended vent color when vents exist |
 | `mood_vents` | `id` AUTO | 08-15: multiple vent entries per day, each `{text, color}`; day color = linear-RGB blend (`_blend_colors` / frontend `mixColors` must stay identical) |
+| `dishes` | `id` TEXT | 08-16 恰饭板块：全站共享菜品库（无 user_id）；行数为 0 才写入首版种子（幂等）；写路径仅 plain INSERT/UPDATE/DELETE，无需 `_pg_sql` 注册 |
+| `user_cards` | `id` AUTO + UNIQUE(user_id, source, source_id) | 08-16 卡牌收集：掉落记录（含隐藏面值）；唯一键即抽卡幂等键 |
+| `checkins` | `(user_id, check_date)` | 08-16 每日签到（主键即幂等；streak 冗余存储；连签 7 天保底 SR+） |
+| `user_achievements` | `(user_id, achievement_id)` | 08-16 成就（惰性评估，达成时写入） |
+
+(卡牌系统写路径均为「预查 + plain INSERT + IntegrityError 回退」，无 `ON DUPLICATE KEY UPDATE`/`INSERT IGNORE`，无需 `_pg_sql` 注册。)
 
 (Also: `ledger`, `email_codes`, `admin_actions`, `invite_codes` — see `_init_schema`.)
 
