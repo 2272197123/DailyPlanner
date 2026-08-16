@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 12
+- **Total Sessions**: 13
 - **Last Active**: 2026-08-16
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~381 | Active |
+| `journal-1.md` | ~404 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 13 | 2026-08-16 | 主题切换动画开关 + 计划页性能优化（请求防抖/渲染治理） | `64f2b6e`, `a7f1c93`, `0867c8e` | `master` |
 | 12 | 2026-08-16 | 时间轴全局顺序语义修正 + 心情页打磨（渐变瓶/主题帘/AI接入吐槽） | - | `master` |
 | 11 | 2026-08-15 | 许愿瓶修正：圆柱瓶形 + 混合色单液面 | - | `master` |
 | 10 | 2026-08-15 | 移动端性能优化（保持设计不变）+ 许愿瓶重绘 | - | `master` |

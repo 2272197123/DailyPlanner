@@ -379,3 +379,26 @@ Root-caused the mood picker glitch: MoodPicker's root is `position: fixed` but w
 ### Status
 
 [OK] **Completed**
+
+
+## Session 13: 主题切换动画开关 + 计划页性能优化（请求防抖/渲染治理）
+
+**Date**: 2026-08-16
+**Task**: 主题切换动画开关 + 计划页性能优化（请求防抖/渲染治理）
+**Branch**: `master`
+
+### Summary
+
+任务1(theme-toggle-redesign)：新建ThemeToggle.vue还原uiverse jolly-chicken-91日夜开关（蓝天太阳漂移云/夜空月亮陨坑闪烁星），替换AppSidebar桌面+移动两处字符按钮，业务逻辑不变；检查轮修复z-index:0光晕遮挡与inline容器transform失效。任务2(plan-page-perf)：saveDay 400ms防抖+visibilitychange/pagehide/路由离开flush+预设指纹比对；fetchDay 30s TTL缓存+in-flight单飞+过期响应startedAt守卫；preset/rules/routines/moods会话内只拉一次；loadDate序号守卫；getComputedTimeline以reactive(_dayVersion)memoize+行指纹复用（勾选不再整列重渲染）；otherPinned上提pinned prop并指纹稳引用；useDragSort rowRects拖拽期缓存+滚动dirty重取+副本/指示线DOM直写零重渲染；ambient-orb移动端/reduced-motion隐藏+ctp-dot改transform/opacity。终审修复3处：非响应式缓存键丢computed订阅（node+vue复现验证）、飞行中GET覆盖本地mutation、pinnedBlocks数组引用不稳。spec新增4条：keyframes覆盖静态transform/inline无transform、Pinia memoize须reactive版本键、in-flight GET与防抖PUT守卫。npm run build全绿；未做实机CDP验证，未部署生产。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `64f2b6e` | (see git log) |
+| `a7f1c93` | (see git log) |
+| `0867c8e` | (see git log) |
+
+### Status
+
+[OK] **Completed**
