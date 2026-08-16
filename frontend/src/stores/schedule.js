@@ -1,3 +1,4 @@
+import { reactive } from 'vue'
 import { defineStore } from 'pinia'
 import { toLocalDate } from '@/utils/format'
 import api, { unwrap } from '@/api/client'
@@ -24,6 +25,45 @@ function _fmtMin(min) {
 function _minutesBetween(start, end) {
   if (!_isTimeStr(start) || !_isTimeStr(end)) return 0
   return Math.max(0, _parseTime(end) - _parseTime(start))
+}
+
+/* ── 性能治理：请求防抖 / 缓存 / 计算 memoize（模块级，store 单例）── */
+
+const SAVE_DEBOUNCE_MS = 400  // saveDay 网络 PUT 合并窗口
+const DAY_CACHE_TTL = 30000   // fetchDay 缓存有效期（本地 mutation 立即刷新）
+
+const _saveTimers = new Map()  // date → timeoutId（待发的 PUT /plan）
+const _dayFetchedAt = {}       // date → ts；有 ts 且在 TTL 内即复用缓存
+const _dayInFlight = new Map() // date → Promise（同 date 并发去重）
+let _presetRulesLoaded = false // preset/rules 为日期无关全局数据，会话内只拉一次
+let _presetRulesInFlight = null
+let _presetJson = null         // 内存中预设快照指纹
+let _lastPresetJson = null     // 上次已提交 /plan-preset 的指纹（相同则跳过 PUT）
+let _presetDirty = false       // 有待提交的预设快照
+
+/* 响应式版本号：getComputedTimeline 的 computed 调用方在缓存命中路径上
+   不会触碰 blocks 深字段 / orderCfg（依赖被重新收集后会丢失订阅），
+   必须靠 _bumpDay 触发重算——版本号因此必须可观察（普通对象会导致
+   命中后勾选/换序不再刷新 UI） */
+const _dayVersion = reactive({}) // date → int：schedules/orderCfg/timelineCfg 变更即 +1
+const _timelineCache = {}        // date → { v, result, byId }（getComputedTimeline 缓存）
+
+function _bumpDay(date) {
+  _dayVersion[date] = (_dayVersion[date] || 0) + 1
+}
+
+/**
+ * 行内容指纹：getComputedTimeline 重建时内容未变的行复用旧对象引用，
+ * TaskCard 的 :block prop 不变 → 勾选单个任务不再整列重渲染。
+ * 须覆盖模板渲染依赖的全部可变字段（store 内块对象为原地 mutation）。
+ */
+function _rowFingerprint(b) {
+  let fp = b.id + '|' + (b.subject || '') + '|' + b.duration + '|' + (b.priority || '') + '|' +
+    (b.category || '') + '|' + (b.time || '') + '|' + (b.note || '') + '|' + (b.goalId || '') + '|' +
+    (b.phase || '') + '|' + (b.completed ? 1 : 0) + '|' + b._rank + '|' + b._startMin + '|' + b._endMin
+  const sts = b.subtasks
+  if (sts && sts.length) fp += '|' + sts.map(st => (st.done ? '1' : '0') + ':' + (st.text || '')).join(',')
+  return fp
 }
 
 /** 克隆任务块并清零完成态（预设快照 / 次日预填用） */
@@ -89,8 +129,21 @@ export const useScheduleStore = defineStore('schedule', {
   },
 
   actions: {
-    async fetchDay(date) {
+    async fetchDay(date, { force = false } = {}) {
+      /* TTL 缓存：近期已拉取（或本地 mutation 刷新过）直接复用内存态 */
+      if (!force && _dayFetchedAt[date] && Date.now() - _dayFetchedAt[date] < DAY_CACHE_TTL) {
+        return this.schedules[date] || null
+      }
+      /* in-flight 去重：同 date 并发请求复用同一 Promise */
+      if (_dayInFlight.has(date)) return _dayInFlight.get(date)
+      const p = this._fetchDayRemote(date).finally(() => _dayInFlight.delete(date))
+      _dayInFlight.set(date, p)
+      return p
+    },
+
+    async _fetchDayRemote(date) {
       this.loading = true
+      const startedAt = Date.now()
       try {
         // 并行拉取：计划 + 排序配置 + 当日已发放 XP 条目（后两者失败静默）
         const [planResp, orderResp, earnedResp] = await Promise.all([
@@ -98,6 +151,13 @@ export const useScheduleStore = defineStore('schedule', {
           api.get(`/order/${date}`).catch(() => null),
           api.get(`/earned/${date}`).catch(() => null)
         ])
+        /* 飞行期间本地已发生 mutation（saveDay 把 ts 刷新到 startedAt 及之后）：
+           响应必然旧于内存态（本地防抖 PUT 尚未到达服务端），跳过覆盖——
+           否则过期响应冲掉本地修改，随后的防抖 PUT 会把旧数据写回服务端 */
+        if (_dayFetchedAt[date] && _dayFetchedAt[date] >= startedAt) {
+          this.loading = false
+          return this.schedules[date] || null
+        }
         // 响应为 {ok, data} 包裹；无计划时 data 为 null → 展示"今日无事"
         const plan = unwrap(planResp.data)
         if (plan) {
@@ -124,6 +184,8 @@ export const useScheduleStore = defineStore('schedule', {
           this.earnedToday[date] = earned
         }
         this.loading = false
+        _dayFetchedAt[date] = Date.now()
+        _bumpDay(date)
         return plan
       } catch {
         // Fall back to localStorage
@@ -134,22 +196,25 @@ export const useScheduleStore = defineStore('schedule', {
             if (all[date]) this.schedules[date] = all[date]
           }
         } catch { /* ignore */ }
+        _bumpDay(date)
+        /* 失败不刷新 _dayFetchedAt：下次进入仍重新拉取（与旧行为一致） */
         this.loading = false
         return this.schedules[date] || null
       }
     },
 
-    async saveDay(date) {
+    /**
+     * 保存当日计划：内存态与 localStorage 即时生效（UI 零延迟），
+     * 网络 PUT 按 date 防抖合并（SAVE_DEBOUNCE_MS）；immediate 立即发送。
+     * 页面隐藏 / 路由离开前须调 flushAllSaves 兜底。
+     */
+    saveDay(date, { immediate = false } = {}) {
       const sched = this.schedules[date]
       if (!sched) return
-      try {
-        // 后端 save_plan 读取 dayMode/energyLevel/specialNotes/blocks/routines/customBlocks/priorityShift/encouragement
-        await api.put(`/plan/${date}`, {
-          ...sched,
-          dayMode: sched.dayMode || sched.mode || this.mode
-        })
-      } catch { /* silent */ }
-      // Local cache
+      _bumpDay(date)
+      /* 本地即最新：fetchDay TTL 不会因自己刚写的数据回滚 */
+      _dayFetchedAt[date] = Date.now()
+      // Local cache（即时：页面意外关闭时的兜底恢复源）
       try {
         const raw = localStorage.getItem('dp_schedules')
         const all = raw ? JSON.parse(raw) : {}
@@ -158,22 +223,87 @@ export const useScheduleStore = defineStore('schedule', {
       } catch { /* ignore */ }
       // v13：当日结构同步为"最近预设"，供次日自动预填（规则块来自周期日程，不进预设）
       this._snapshotPreset(date, sched)
+      if (immediate) return this._flushSave(date)
+      if (_saveTimers.has(date)) clearTimeout(_saveTimers.get(date))
+      _saveTimers.set(date, setTimeout(() => this._flushSave(date), SAVE_DEBOUNCE_MS))
+    },
+
+    /** 立即发送指定 date 的待发 PUT /plan（并顺带 flush 预设快照） */
+    async _flushSave(date) {
+      if (_saveTimers.has(date)) {
+        clearTimeout(_saveTimers.get(date))
+        _saveTimers.delete(date)
+      }
+      const sched = this.schedules[date]
+      if (sched) {
+        try {
+          // 后端 save_plan 读取 dayMode/energyLevel/specialNotes/blocks/routines/customBlocks/priorityShift/encouragement
+          await api.put(`/plan/${date}`, {
+            ...sched,
+            dayMode: sched.dayMode || sched.mode || this.mode
+          })
+        } catch { /* silent */ }
+      }
+      this._flushPreset()
+    },
+
+    flushSave(date) {
+      return this._flushSave(date)
+    },
+
+    /** 路由离开 / visibilitychange hidden / pagehide 时调用：发出全部待发保存 */
+    flushAllSaves() {
+      for (const date of [..._saveTimers.keys()]) this._flushSave(date)
+      this._flushPreset()
+    },
+
+    /** 预设快照 PUT：内容指纹与上次提交一致则跳过；失败标脏下次重试 */
+    _flushPreset() {
+      if (!_presetDirty) return
+      if (_presetJson === _lastPresetJson) {
+        _presetDirty = false
+        return
+      }
+      const snapshot = _presetJson
+      _lastPresetJson = snapshot
+      _presetDirty = false
+      api.put('/plan-preset', { preset: this.preset }).catch(() => {
+        /* 发送失败：回滚指纹，下次 flush 重试（语义同旧的静默失败，但不丢重试机会） */
+        _lastPresetJson = null
+        _presetDirty = true
+      })
     },
 
     /* ── v13 计划预设链 + 周期固定日程 ── */
 
-    /** 拉取预设与周期规则（随 loadDay 并行调用；失败回落 localStorage） */
-    async fetchPresetAndRules() {
+    /** 拉取预设与周期规则（日期无关全局数据：会话内只拉一次，并发单飞；失败回落 localStorage 并允许重试） */
+    fetchPresetAndRules({ force = false } = {}) {
+      if (_presetRulesLoaded && !force) return Promise.resolve()
+      if (_presetRulesInFlight) return _presetRulesInFlight
+      _presetRulesInFlight = this._fetchPresetAndRulesRemote().finally(() => {
+        _presetRulesInFlight = null
+      })
+      return _presetRulesInFlight
+    },
+
+    async _fetchPresetAndRulesRemote() {
       const [presetResp, rulesResp] = await Promise.all([
         api.get('/plan-preset').catch(() => null),
         api.get('/recurring-rules').catch(() => null)
       ])
       if (presetResp) {
         this.preset = unwrap(presetResp.data) || null
+        /* 服务端预设为准：同步提交指纹（剔除 savedAt 与 _snapshotPreset 同口径），
+           随后内容不变的 saveDay 不再 PUT /plan-preset */
+        _presetJson = _lastPresetJson = JSON.stringify(this.preset ? { ...this.preset, savedAt: '' } : null)
+        _presetDirty = false
       } else {
         try {
           const raw = localStorage.getItem('dp_plan_preset')
-          if (raw) this.preset = JSON.parse(raw)
+          if (raw) {
+            this.preset = JSON.parse(raw)
+            _presetJson = JSON.stringify(this.preset ? { ...this.preset, savedAt: '' } : null)
+          }
         } catch { /* ignore */ }
       }
       if (rulesResp) {
@@ -185,16 +315,24 @@ export const useScheduleStore = defineStore('schedule', {
           if (raw) this.recurringRules = JSON.parse(raw)
         } catch { /* ignore */ }
       }
+      /* 两个请求都失败（纯本地回落）时允许下次重试 */
+      if (presetResp || rulesResp) _presetRulesLoaded = true
     },
 
-    /** saveDay 内联动：把当天结构（剔除完成态、剔除规则块）快照为最近预设 */
+    /** saveDay 内联动：把当天结构（剔除完成态、剔除规则块）快照为最近预设。
+     *  内容指纹不变则不动 preset 引用、不标脏（跳过 PUT /plan-preset）。 */
     _snapshotPreset(date, sched) {
       const src = (sched.blocks || []).filter(b => !b.ruleId)
-      this.preset = src.length
+      const next = src.length
         ? { blocks: src.map(b => _stripBlock(b)), savedFrom: date, savedAt: new Date().toISOString() }
         : null
+      /* savedAt 每次都变 → 比对时剔除时间戳，只看结构内容 */
+      const json = JSON.stringify(next ? { ...next, savedAt: '' } : null)
+      if (json === _presetJson) return
+      _presetJson = json
+      this.preset = next
       try { localStorage.setItem('dp_plan_preset', JSON.stringify(this.preset)) } catch { /* ignore */ }
-      api.put('/plan-preset', { preset: this.preset }).catch(() => {})
+      if (json !== _lastPresetJson) _presetDirty = true
     },
 
     saveRecurringRules(rules) {
@@ -410,6 +548,7 @@ export const useScheduleStore = defineStore('schedule', {
              避免用计划数组原始序导致钉时锚点错位 */
           : this.getComputedTimeline(date).map(b => b.id)
       }
+      _bumpDay(date)
       this._persistOrderCfg(date)
     },
 
@@ -421,6 +560,7 @@ export const useScheduleStore = defineStore('schedule', {
         start: existing?.start || this.timelineCfg[date]?.start || '09:00',
         order: orderIds
       }
+      _bumpDay(date)
       this._persistOrderCfg(date)
     },
 
@@ -567,7 +707,15 @@ export const useScheduleStore = defineStore('schedule', {
      */
     getComputedTimeline(date) {
       const sched = this.schedules[date]
-      if (!sched || !sched.blocks) return []
+      if (!sched || !sched.blocks) {
+        delete _timelineCache[date]
+        return []
+      }
+      /* memoize：数据版本（_bumpDay）未变直接返回旧结果——同输入同引用，
+         FlowTimeline/TaskCard 多处调用不再重复全量计算 */
+      const v = _dayVersion[date] || 0
+      const cache = _timelineCache[date]
+      if (cache && cache.v === v) return cache.result
       const order = this.orderCfg[date]?.order
       const rank = new Map()
       if (Array.isArray(order)) order.forEach((id, i) => { if (!rank.has(id)) rank.set(id, i) })
@@ -615,7 +763,25 @@ export const useScheduleStore = defineStore('schedule', {
         flowComputed.push({ ...b, _rank: rank, _startMin: start, _endMin: cursor, _startStr: _fmtMin(start), _endStr: _fmtMin(cursor) })
       }
 
-      return [...pinnedComputed, ...flowComputed].sort((a, b) => a._startMin - b._startMin || a._rank - b._rank)
+      const computed = [...pinnedComputed, ...flowComputed].sort((a, b) => a._startMin - b._startMin || a._rank - b._rank)
+
+      /* 行对象复用：内容指纹未变的块沿用旧引用，TaskCard prop 身份不变 →
+         单个块变化（勾选/改时）不再导致整列卡片重渲染 */
+      const prevById = cache ? cache.byId : null
+      const byId = new Map()
+      const result = computed.map(row => {
+        const fp = _rowFingerprint(row)
+        const prev = prevById ? prevById.get(row.id) : null
+        if (prev && prev.fp === fp) {
+          byId.set(row.id, prev)
+          return prev.row
+        }
+        const entry = { row, fp }
+        byId.set(row.id, entry)
+        return row
+      })
+      _timelineCache[date] = { v, result, byId }
+      return result
     },
 
     initFromCache() {

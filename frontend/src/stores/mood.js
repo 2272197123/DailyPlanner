@@ -68,23 +68,35 @@ export const useMoodStore = defineStore('mood', () => {
     }
   }
 
+  /* 按年去重：同年会话内只拉一次（App.vue / AppSidebar 双调用合并于此），并发单飞 */
+  const loadedYears = new Set()
+  const moodsInFlight = new Map()
+
   async function fetchMoods(year = new Date().getFullYear()) {
+    if (loadedYears.has(year)) return
+    if (moodsInFlight.has(year)) return moodsInFlight.get(year)
     loading.value = true
-    try {
-      const { data } = await api.get('/moods', { params: { year } })
-      const list = unwrap(data)
-      if (Array.isArray(list)) {
-        const mapped = {}
-        list.forEach(item => {
-          mapped[item.date] = item
-        })
-        entries.value = { ...entries.value, ...mapped }
+    const p = (async () => {
+      try {
+        const { data } = await api.get('/moods', { params: { year } })
+        const list = unwrap(data)
+        if (Array.isArray(list)) {
+          const mapped = {}
+          list.forEach(item => {
+            mapped[item.date] = item
+          })
+          entries.value = { ...entries.value, ...mapped }
+          loadedYears.add(year)
+        }
+      } catch (err) {
+        console.warn('Failed to fetch moods:', err)
+      } finally {
+        loading.value = false
+        moodsInFlight.delete(year)
       }
-    } catch (err) {
-      console.warn('Failed to fetch moods:', err)
-    } finally {
-      loading.value = false
-    }
+    })()
+    moodsInFlight.set(year, p)
+    return p
   }
 
   async function saveMood(date, payload) {

@@ -3,16 +3,19 @@
    鼠标 + 触屏统一：按下移动超过 6px 进入拖拽，
    否则放行点击（保持整卡点击切换完成）。
    悬浮副本与插入指示线由父组件用 Teleport 渲染，
-   本 composable 只暴露位置状态。
+   位置更新走 DOM style 直写（cloneRef/indicatorRef），
+   不再经响应式 ref —— 拖拽期间父组件零重渲染。
    ═══════════════════════════════════════ */
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 
 /**
  * @param {Object} options
  * @param {Ref} options.containerRef 行容器（行需带 data-bid，钉时块行带 data-pinned="1"）
+ * @param {Ref} options.cloneRef    悬浮副本元素（fixed，Teleport 到 body）
+ * @param {Ref} options.indicatorRef 插入指示线元素（fixed，Teleport 到 body）
  * @param {Function} options.onDrop  (dragId, target) => void；target = { beforeId } | { onId }
  */
-export function useDragSort({ containerRef, onDrop }) {
+export function useDragSort({ containerRef, cloneRef, indicatorRef, onDrop }) {
   const THRESHOLD = 6      // 拖拽激活阈值（px），阈值内抬起视为点击
   const HOLD_MS = 280      // 触屏长按就位时长（ms）：先移动 = 让位原生滚动，先长按 = 拖拽
   const EDGE = 64          // 视口边缘自动滚动触发带（px）
@@ -20,8 +23,6 @@ export function useDragSort({ containerRef, onDrop }) {
 
   const dragging = ref(false)
   const dragId = ref(null)
-  const clonePos = ref({ left: 0, top: 0, width: 0 })
-  const indicator = ref({ show: false, mode: 'gap', top: 0, left: 0, width: 0, height: 0 })
 
   let pendingId = null
   let startX = 0
@@ -35,11 +36,19 @@ export function useDragSort({ containerRef, onDrop }) {
   let armed = false     // 触屏长按已就位（就位后移动才进入拖拽）
   let holdTimer = null
 
-  /* 所有可拖拽块行的视口矩形（每次移动重取：块数 <50 开销可忽略，自动滚动后仍准确） */
+  /* 拖拽帧状态（非响应式，直写 DOM）：副本位置 + 行矩形缓存 */
+  const cloneState = { left: 0, top: 0, width: 0 }
+  let rectsCache = null
+  let rectsDirty = true
+
+  /* 所有可拖拽块行的视口矩形。
+     拖拽期间布局不变 → 缓存复用，避免每次 pointermove 强制 layout；
+     仅拖拽开始与自动滚动后（dirty）重取 */
   function rowRects() {
+    if (rectsCache && !rectsDirty) return rectsCache
     const root = containerRef.value
     if (!root) return []
-    return [...root.querySelectorAll('.flow-row[data-bid]')]
+    rectsCache = [...root.querySelectorAll('.flow-row[data-bid]')]
       .filter(el => el.dataset.bid !== dragId.value)
       .map(el => {
         const r = el.getBoundingClientRect()
@@ -53,6 +62,8 @@ export function useDragSort({ containerRef, onDrop }) {
           width: r.width
         }
       })
+    rectsDirty = false
+    return rectsCache
   }
 
   /* 指针位置 → 落点：落在钉时块身上 = 钉住；其余（含 routine/now 行附近）映射到最近块间隙 */
@@ -71,22 +82,42 @@ export function useDragSort({ containerRef, onDrop }) {
     return { beforeId: null, top: last.bottom, left: last.left, width: last.width, height: 0 }
   }
 
+  function renderClone() {
+    const el = cloneRef && cloneRef.value
+    if (!el) return
+    el.style.left = cloneState.left + 'px'
+    el.style.top = cloneState.top + 'px'
+    el.style.width = cloneState.width + 'px'
+  }
+
+  function renderIndicator(t) {
+    const el = indicatorRef && indicatorRef.value
+    if (!el) return
+    if (!t) {
+      el.style.display = 'none'
+      return
+    }
+    const mode = t.onId ? 'pin' : 'gap'
+    if (el.dataset.mode !== mode) {
+      /* 模式切换（间隙 ↔ 钉住）才改 class/图标，避免每帧 DOM 写 */
+      el.dataset.mode = mode
+      el.className = 'drop-indicator di-' + mode
+      const icon = el.firstElementChild
+      if (icon) icon.textContent = mode === 'pin' ? '📌' : '↕'
+    }
+    el.style.display = ''
+    el.style.left = t.left + 'px'
+    el.style.top = t.top + 'px'
+    el.style.width = t.width + 'px'
+    el.style.height = t.onId ? t.height + 'px' : '0px'
+  }
+
   function updateDrag(y) {
-    clonePos.value = { ...clonePos.value, top: y - grabOffsetY }
+    cloneState.top = y - grabOffsetY
+    renderClone()
     const t = computeTarget(y)
     target = t
-    if (t) {
-      indicator.value = {
-        show: true,
-        mode: t.onId ? 'pin' : 'gap',
-        top: t.top,
-        left: t.left,
-        width: t.width,
-        height: t.height
-      }
-    } else {
-      indicator.value = { ...indicator.value, show: false }
-    }
+    renderIndicator(t)
   }
 
   function stopAutoScroll() {
@@ -96,13 +127,15 @@ export function useDragSort({ containerRef, onDrop }) {
     }
   }
 
-  /* 距视口上下边缘 <64px 时自动滚动页面，滚动后重算落点 */
+  /* 距视口上下边缘 <64px 时自动滚动页面，滚动后标记矩形缓存失效再重算落点
+     （滚动写与布局读不在同一帧交替，避免 layout thrashing） */
   function autoScroll(y) {
     if (y < EDGE || y > window.innerHeight - EDGE) {
       if (scrollTimer) return
       const dir = y < EDGE ? -1 : 1
       scrollTimer = setInterval(() => {
         window.scrollBy(0, dir * SCROLL_STEP)
+        rectsDirty = true
         updateDrag(lastY)
       }, 32)
     } else {
@@ -113,14 +146,19 @@ export function useDragSort({ containerRef, onDrop }) {
   function activate(e) {
     dragging.value = true
     dragId.value = pendingId
+    rectsDirty = true
     const root = containerRef.value
     const row = root && root.querySelector(`.flow-row[data-bid="${pendingId}"]`)
     if (row) {
       const r = row.getBoundingClientRect()
       grabOffsetY = startY - r.top
-      clonePos.value = { left: r.left, top: e.clientY - grabOffsetY, width: r.width }
+      cloneState.left = r.left
+      cloneState.top = e.clientY - grabOffsetY
+      cloneState.width = r.width
       row.classList.add('drag-src')
     }
+    /* 副本/指示线元素由 v-if="dragging" 挂载，待 DOM 就绪后直写定位 */
+    nextTick(renderClone)
     /* 拖拽中禁止文本选中 */
     document.body.style.userSelect = 'none'
   }
@@ -225,7 +263,8 @@ export function useDragSort({ containerRef, onDrop }) {
     dragging.value = false
     dragId.value = null
     target = null
-    indicator.value = { ...indicator.value, show: false }
+    rectsCache = null
+    rectsDirty = true
   }
 
   onMounted(() => {
@@ -241,7 +280,7 @@ export function useDragSort({ containerRef, onDrop }) {
     cleanup()
   })
 
-  return { dragging, dragId, clonePos, indicator }
+  return { dragging, dragId }
 }
 
 export default useDragSort

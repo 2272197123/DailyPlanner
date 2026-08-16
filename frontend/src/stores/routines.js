@@ -2,6 +2,10 @@ import { defineStore } from 'pinia'
 import api, { unwrap } from '@/api/client'
 import { useScheduleStore } from '@/stores/schedule'
 
+/* 模板列表为日期无关全局数据：会话内只拉一次（并发单飞；失败允许重试） */
+let _routinesLoaded = false
+let _routinesInFlight = null
+
 export const useRoutineStore = defineStore('routines', {
   state: () => ({
     routines: [],          // Global template (shared across uninitialized future dates)
@@ -27,20 +31,25 @@ export const useRoutineStore = defineStore('routines', {
   },
 
   actions: {
-    async fetchRoutines() {
+    async fetchRoutines({ force = false } = {}) {
+      if (_routinesLoaded && !force) return this.routines
+      if (_routinesInFlight) return _routinesInFlight
       this.loading = true
-      try {
-        const { data } = await api.get('/routines')
-        const list = unwrap(data)
-        if (Array.isArray(list) && list.length > 0) {
-          this.routines = list
-        }
+      _routinesInFlight = (async () => {
+        try {
+          const { data } = await api.get('/routines')
+          const list = unwrap(data)
+          if (Array.isArray(list) && list.length > 0) {
+            this.routines = list
+          }
+          /* 请求成功即标记（空列表也是有效结果）；失败不标记，下次进入重试 */
+          _routinesLoaded = true
+        } catch { /* keep local cache */ }
         this.loading = false
+        _routinesInFlight = null
         return this.routines
-      } catch {
-        this.loading = false
-        return this.routines
-      }
+      })()
+      return _routinesInFlight
     },
 
     async persistTemplate() {

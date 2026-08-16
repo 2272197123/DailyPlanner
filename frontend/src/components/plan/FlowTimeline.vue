@@ -49,6 +49,24 @@ const timedRows = computed(() => {
   return rows
 })
 
+/* 当日钉时块区间（星图拖杆磁吸避让用）：memoized 时间轴算一次，prop 下发各 TaskCard，
+   避免每张卡各自全量重算时间轴（N 卡 = N 次计算）。
+   指纹复用：钉时区间未变时保持数组引用不变——否则每次时间轴重算（如勾选任务）
+   都生成新数组，所有 TaskCard 的 pinned prop 身份变化 → 整列重渲染，
+   抵销 getComputedTimeline 行复用的收益 */
+let _pinnedCache = { key: '', list: [] }
+const pinnedBlocks = computed(() => {
+  const pinned = scheduleStore.getComputedTimeline(scheduleStore.currentDate)
+    .filter(b => b.time)
+  const key = pinned.map(b => b.id + ':' + b._startMin + ':' + b._endMin).join('|')
+  if (key === _pinnedCache.key) return _pinnedCache.list
+  _pinnedCache = {
+    key,
+    list: pinned.map(b => ({ id: b.id, start: b._startMin, end: b._endMin }))
+  }
+  return _pinnedCache.list
+})
+
 const anytimeRoutines = computed(() =>
   routineStore.routinesForCurrentDate.filter(r => parseHM(r.time) === null)
 )
@@ -276,8 +294,14 @@ function onRoutineToggle() {
 }
 
 /* ═══ 拖拽排序（Pointer Events，鼠标 + 触屏；见 useDragSort）═══ */
-const { dragging, dragId, clonePos, indicator } = useDragSort({
+/* cloneEl/indicatorEl：副本与指示线位置由 useDragSort 直写 DOM style，
+   拖拽期间 FlowTimeline 不参与每帧 patch */
+const cloneEl = ref(null)
+const indicatorEl = ref(null)
+const { dragging, dragId } = useDragSort({
   containerRef: rootRef,
+  cloneRef: cloneEl,
+  indicatorRef: indicatorEl,
   onDrop: (id, target) => scheduleStore.resolveDrop(scheduleStore.currentDate, id, target)
 })
 
@@ -392,6 +416,7 @@ onUnmounted(() => {
             :block="row.payload"
             :index="0"
             :date-state="dateState"
+            :pinned="pinnedBlocks"
             @toggle="handleToggleTask"
             @toggle-subtask="(si, ev) => handleToggleSubtask(row.payload.id, si, ev)"
           />
@@ -474,28 +499,24 @@ onUnmounted(() => {
     <!-- 单任务完成：卡牌翻转庆祝 -->
     <CardCelebration ref="celebrationRef" />
 
-    <!-- 拖拽悬浮副本 + 插入指示线（fixed 元素，Teleport body） -->
+    <!-- 拖拽悬浮副本 + 插入指示线（fixed 元素，Teleport body；位置由 useDragSort 直写 DOM） -->
     <Teleport to="body">
       <div
         v-if="dragging && dragBlock"
+        ref="cloneEl"
         class="drag-clone"
-        :style="{ left: clonePos.left + 'px', top: clonePos.top + 'px', width: clonePos.width + 'px' }"
       >
         <span class="dc-time">{{ dragBlock._startStr }}–{{ dragBlock._endStr }}</span>
         <span class="dc-subject">{{ dragBlock.subject || '(未命名)' }}</span>
       </div>
       <div
-        v-if="dragging && indicator.show"
-        class="drop-indicator"
-        :class="'di-' + indicator.mode"
-        :style="{
-          left: indicator.left + 'px',
-          top: indicator.top + 'px',
-          width: indicator.width + 'px',
-          height: indicator.mode === 'pin' ? indicator.height + 'px' : '0px'
-        }"
+        v-if="dragging"
+        ref="indicatorEl"
+        class="drop-indicator di-gap"
+        data-mode="gap"
+        style="display: none"
       >
-        <span class="di-icon">{{ indicator.mode === 'pin' ? '📌' : '↕' }}</span>
+        <span class="di-icon">↕</span>
       </div>
     </Teleport>
   </div>

@@ -44,20 +44,34 @@ onMounted(() => {
     moodStore.fetchMoods()
   }
 
-  // Ambient orbs slow float + scale animation
-  anime({
-    targets: '.ambient-orb',
-    translateX: () => anime.random(-30, 30),
-    translateY: () => anime.random(-20, 20),
-    scale: [1, 1.08, 1],
-    opacity: [0.18, 0.28, 0.18],
-    easing: 'easeInOutSine',
-    duration: () => anime.random(8000, 14000),
-    delay: anime.stagger(2000),
-    loop: true,
-    direction: 'alternate'
-  })
+  /* saveDay 网络层有 400ms 防抖：页面隐藏/关闭前 flush 待发保存，避免丢数据
+     （localStorage 在 saveDay 时已即时写入，这里是服务端持久化兜底） */
+  document.addEventListener('visibilitychange', flushPendingSaves)
+  window.addEventListener('pagehide', flushPendingSaves)
+
+  /* Ambient orbs slow float + scale animation
+     移动端（≤768px）与 reduced-motion 下 CSS 已隐藏 orb，跳过 JS 动画避免空跑 */
+  const orbsDisabled = window.matchMedia('(max-width: 768px)').matches ||
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (!orbsDisabled) {
+    anime({
+      targets: '.ambient-orb',
+      translateX: () => anime.random(-30, 30),
+      translateY: () => anime.random(-20, 20),
+      scale: [1, 1.08, 1],
+      opacity: [0.18, 0.28, 0.18],
+      easing: 'easeInOutSine',
+      duration: () => anime.random(8000, 14000),
+      delay: anime.stagger(2000),
+      loop: true,
+      direction: 'alternate'
+    })
+  }
 })
+
+function flushPendingSaves() {
+  scheduleStore.flushAllSaves()
+}
 </script>
 
 <template>

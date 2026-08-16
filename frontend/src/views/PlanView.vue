@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, onBeforeRouteLeave } from 'vue-router'
 import { useScheduleStore } from '@/stores/schedule'
 import { useRoutineStore } from '@/stores/routines'
 import { useToastStore } from '@/stores/toast'
@@ -24,18 +24,29 @@ const toastStore = useToastStore()
 const weekStripRef = ref(null)
 
 /* ── 日期切换：拉取计划/预设/规则 → 空白日自动预填 → 打卡 + 日课副本 ── */
+/* 序号守卫：快速连点切日期时，过期 loadDate 的后续写入（ensureDayPlan/toast/initDailyCopy）直接丢弃 */
+let loadSeq = 0
 async function loadDate(date) {
+  const seq = ++loadSeq
   await Promise.all([
     scheduleStore.fetchDay(date),
     scheduleStore.fetchPresetAndRules()
   ])
+  if (seq !== loadSeq) return
   // v14：空白的新日期（今天/未来）仅自动物化周期规则；预设改为手动「导入前一天」
   const filled = await scheduleStore.ensureDayPlan(date)
+  if (seq !== loadSeq) return
   if (filled) toastStore.ok('已按你的固定日程填入，可继续调整')
   scheduleStore.fetchRoutineProgress(date)
   await routineStore.fetchRoutines()
+  if (seq !== loadSeq) return
   routineStore.initDailyCopy(date)
 }
+
+/* 路由离开前 flush 防抖中的 saveDay，避免丢数据 */
+onBeforeRouteLeave(() => {
+  scheduleStore.flushAllSaves()
+})
 
 watch(() => scheduleStore.currentDate, (date) => {
   if (date) loadDate(date)

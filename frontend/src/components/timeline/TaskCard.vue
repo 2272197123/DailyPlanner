@@ -12,7 +12,8 @@ import StarDateBar from '@/components/plan/StarDateBar.vue'
 const props = defineProps({
   block: Object,
   index: Number,
-  dateState: String
+  dateState: String,
+  pinned: Array  // 当日钉时块区间 [{id,start,end}]，由 FlowTimeline 统一计算下发
 })
 
 const emit = defineEmits(['toggle', 'toggleSubtask', 'edit', 'delete', 'timerStart'])
@@ -110,12 +111,17 @@ const dialTime = ref('09:00')
 let dialDirty = false // 用户真正拖过轮盘/拖杆才把 ✓完成 视为「应用时间」
 let flipping = false
 
-/* 当日其他钉时块区间（星图拖杆磁吸避让用） */
-const otherPinned = computed(() =>
-  scheduleStore.getComputedTimeline(scheduleStore.currentDate)
-    .filter(b => b.id !== props.block.id && b.time)
-    .map(b => ({ start: b._startMin, end: b._endMin }))
-)
+/* 当日其他钉时块区间（星图拖杆磁吸避让用）：优先用 FlowTimeline 下发的 pinned prop，
+   未下发时回落到 store 计算（getComputedTimeline 已 memoize，开销可控） */
+const otherPinned = computed(() => {
+  const list = props.pinned ||
+    scheduleStore.getComputedTimeline(scheduleStore.currentDate)
+      .filter(b => b.time)
+      .map(b => ({ id: b.id, start: b._startMin, end: b._endMin }))
+  return list
+    .filter(p => p.id !== props.block.id)
+    .map(p => ({ start: p.start, end: p.end }))
+})
 
 function flipTo(showBack) {
   if (flipping) return
@@ -411,16 +417,26 @@ function handleDelete() {
   background: var(--accent);
   border: 2px solid var(--bg-elevated);
   margin-top: -5px;
+  position: relative;
+  z-index: 0;
   transition: all var(--duration-fast) var(--ease-out);
 }
 
-.ctp-dot.pulsing {
+/* 脉冲光环：box-shadow 动画不可合成（每帧 repaint），改为 ::after 的
+   transform/opacity 呼吸（同 2s 节奏、同扩散渐隐观感，合成器直接渲染） */
+.ctp-dot.pulsing::after {
+  content: '';
+  position: absolute;
+  inset: -2px; /* 对齐 border-box 外缘 */
+  border-radius: 50%;
+  background: var(--accent);
+  z-index: -1; /* 压在点本体下，只露出扩散出边界的部分（同 box-shadow 层序） */
   animation: dot-pulse 2s ease-in-out infinite;
 }
 
 @keyframes dot-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 var(--accent); }
-  50% { box-shadow: 0 0 0 6px transparent; }
+  0% { transform: scale(1); opacity: 0.55; }
+  100% { transform: scale(2); opacity: 0; }
 }
 
 .state-past .ctp-dot { background: var(--state-past); }
