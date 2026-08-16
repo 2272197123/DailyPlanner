@@ -186,6 +186,16 @@ function addCustomPreset() {
   -webkit-backdrop-filter: blur(4px);
 }
 
+/* 移动端去 backdrop-filter（照 components.css .card-glass 模式）：全屏滤镜
+   在老移动 GPU 上逐帧重绘；提高底色不透明度补偿去 blur 后的遮挡感 */
+@media (max-width: 768px) {
+  .mood-picker-overlay {
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
 .mood-picker {
   width: 100%;
   max-width: 420px;

@@ -13,6 +13,17 @@ export function prefersReducedMotion() {
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
+/* 移动端视口（≤768px）一次性判定，同 App.vue orbsDisabled 模式 */
+let _mobileViewport = null
+export function isMobileViewport() {
+  if (_mobileViewport === null) {
+    _mobileViewport = typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia('(max-width: 768px)').matches
+  }
+  return _mobileViewport
+}
+
 export function useAnime() {
   const activeAnimations = new Set()
 
@@ -31,8 +42,14 @@ export function useAnime() {
     return animate(target, { ...preset, ...overrides })
   }
 
-  function staggerEnter(selector, container, presetName = 'staggerFadeUp') {
-    const elements = container ? container.querySelectorAll(selector) : document.querySelectorAll(selector)
+  /* maxCount > 0 时只动画前 N 个元素（年历 365 格收敛 stagger 用）；
+     移动端 / reduced-motion 直接不播（大批 DOM 逐帧写在老 GPU 上卡顿） */
+  function staggerEnter(selector, container, presetName = 'staggerFadeUp', maxCount = 0) {
+    if (prefersReducedMotion() || isMobileViewport()) return null
+    let elements = container ? container.querySelectorAll(selector) : document.querySelectorAll(selector)
+    if (maxCount > 0 && elements.length > maxCount) {
+      elements = Array.prototype.slice.call(elements, 0, maxCount)
+    }
     if (!elements.length) return null
     return runPreset(elements, presetName)
   }

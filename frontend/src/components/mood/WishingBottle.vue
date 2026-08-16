@@ -334,6 +334,14 @@ onUnmounted(() => {
   animation: none;
 }
 
+/* 移动端停用波浪（照搬 mini 先例）：SVG 渐变 path 在老移动 GPU 上逐帧重绘太贵，
+   液体保留静态渐变色，气泡已按移动端减量（保持） */
+@media (max-width: 768px) {
+  .wb-liquid {
+    animation: none;
+  }
+}
+
 /* 混合色变化时 stop-color 平滑过渡（chrome80 支持 stop-color 过渡） */
 .wb-stop {
   transition: stop-color 0.6s ease;

@@ -164,7 +164,9 @@ watch(() => props.year, async (newYear) => {
   await moodStore.fetchMoods(newYear)
   await nextTick()
   if (gridRef.value) {
-    staggerEnter('.mood-year-cell', gridRef.value)
+    /* 桌面端收敛 stagger：只动画前 56 格（约 8 周列），365 格全量 stagger
+       约 22s 长尾；移动端 / reduced-motion 由 staggerEnter 内部直接跳过 */
+    staggerEnter('.mood-year-cell', gridRef.value, 'staggerFadeUp', 56)
   }
   scrollToCurrentWeek()
 }, { immediate: true })

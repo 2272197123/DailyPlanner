@@ -23,6 +23,10 @@ const collapsed = ref(false)
 const mobileOpen = ref(false)
 const ventText = ref('')
 
+/* 移动端视口一次性判定（同 App.vue orbsDisabled 模式）：抽屉未打开时不渲染
+   84 格心情图——隐藏但仍挂载时，任何 vent 增删都会全量重算 84 格颜色 */
+const isMobile = window.matchMedia('(max-width: 768px)').matches
+
 const navItems = computed(() => {
   const items = [
     { name: 'dashboard', title: '总览', icon: '□' },
@@ -188,7 +192,7 @@ watch(() => route.name, () => {
       </router-link>
     </nav>
 
-    <div v-if="!collapsed" class="sidebar-mood">
+    <div v-if="!collapsed && (!isMobile || mobileOpen)" class="sidebar-mood">
       <div class="mood-header">
         <span class="mood-title">近 12 周心情</span>
         <router-link :to="{ name: 'mood' }" class="mood-link">查看全部</router-link>

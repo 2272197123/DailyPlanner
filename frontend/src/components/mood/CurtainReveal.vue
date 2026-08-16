@@ -7,7 +7,7 @@
    ═══════════════════════════════════════ */
 import { ref, onMounted } from 'vue'
 import anime from 'animejs'
-import { prefersReducedMotion } from '@/composables/useAnime'
+import { prefersReducedMotion, isMobileViewport } from '@/composables/useAnime'
 
 const emit = defineEmits(['done'])
 
@@ -17,7 +17,8 @@ const rightRef = ref(null)
 const valanceRef = ref(null)
 
 onMounted(() => {
-  if (prefersReducedMotion()) {
+  /* 移动端同样跳过（老 GPU 上两片 51vw 大层位移动画太贵），CSS 侧有 display:none 兜底 */
+  if (prefersReducedMotion() || isMobileViewport()) {
     show.value = false
     emit('done')
     return
@@ -140,5 +141,18 @@ onMounted(() => {
   font-size: 12px;
   letter-spacing: 0.5em;
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
+}
+
+/* 移动端 / reduced-motion 兜底：即使被误挂载也不显示（照 atmosphere.css orb 模式） */
+@media (max-width: 768px) {
+  .curtain-stage {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .curtain-stage {
+    display: none;
+  }
 }
 </style>

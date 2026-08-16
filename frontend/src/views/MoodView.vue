@@ -1,9 +1,14 @@
+<script>
+/* 模块级会话标志：MoodView 非 keep-alive，路由往返重挂载时不再重播帘幕 */
+let curtainPlayedThisSession = false
+</script>
+
 <script setup>
 /* ═══════════════════════════════════════
    MoodView.vue — 心情页（塔罗药剂主题）
    四个视图：当日（许愿瓶+吐槽录入）/ 近7天 / 近一月 / 年历。
    selectedDate 贯通：当日/录入/删除都作用于选中日期。
-   进页播放丝绒帘开幕，顶部星星吊坠钟摆，背景环境星尘。
+   首次进页播放丝绒帘开幕（每会话一次），顶部星星吊坠钟摆，背景环境星尘。
    ═══════════════════════════════════════ */
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import MoodGrid from '@/components/mood/MoodGrid.vue'
@@ -74,16 +79,21 @@ function fmtVentTime(vent) {
   return ts.length >= 16 ? ts.slice(11, 16) : ''
 }
 
-/* ── 帘子开幕：每次进入心情页播放一次 ── */
+/* ── 动效降级判定（setup 时一次即可）：星尘粒子数 / 帘幕跳过共用 ── */
+const reduced = prefersReducedMotion()
+const isMobile = window.matchMedia('(max-width: 768px)').matches
+
+/* ── 帘子开幕：每会话只播一次；移动端 / reduced-motion 直接跳过
+     （CurtainReveal 内还有 CSS display:none 兜底，照 App.vue orb 模式）── */
 const curtainOn = ref(false)
 onMounted(() => {
+  if (curtainPlayedThisSession || reduced || isMobile) return
+  curtainPlayedThisSession = true
   curtainOn.value = true
 })
 
 /* ── 环境星尘（少量慢速漂浮；reduced-motion 不渲染）── */
-const reduced = prefersReducedMotion()
-/* 移动端粒子数降到 8（fixed 无限动画 span 在老 GPU 上很贵）；setup 时判定一次即可 */
-const isMobile = window.matchMedia('(max-width: 768px)').matches
+/* 移动端粒子数降到 8（fixed 无限动画 span 在老 GPU 上很贵） */
 const dust = Array.from({ length: isMobile ? 8 : 24 }, (_, i) => ({
   left: (i * 41 + 13) % 100,
   top: (i * 29 + 7) % 100,

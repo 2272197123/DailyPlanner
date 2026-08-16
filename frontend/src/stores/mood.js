@@ -25,17 +25,6 @@ export const useMoodStore = defineStore('mood', () => {
 
   const todayMood = computed(() => entries.value[today.value] || null)
 
-  const yearEntries = computed(() => {
-    const result = {}
-    const currentYear = new Date().getFullYear()
-    Object.entries(entries.value).forEach(([date, entry]) => {
-      if (date.startsWith(String(currentYear))) {
-        result[date] = entry
-      }
-    })
-    return result
-  })
-
   function getEntry(date) {
     return entries.value[date] || null
   }
@@ -187,7 +176,6 @@ export const useMoodStore = defineStore('mood', () => {
     loading,
     today,
     todayMood,
-    yearEntries,
     getEntry,
     getVents,
     dayColor,
