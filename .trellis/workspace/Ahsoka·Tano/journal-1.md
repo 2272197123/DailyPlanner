@@ -402,3 +402,25 @@ Root-caused the mood picker glitch: MoodPicker's root is `position: fixed` but w
 ### Status
 
 [OK] **Completed**
+
+
+## Session 14: 心情页性能优化（年历stagger/帘幕/常驻动画治理）
+
+**Date**: 2026-08-16
+**Task**: 心情页性能优化（年历stagger/帘幕/常驻动画治理）
+**Branch**: `master`
+
+### Summary
+
+任务08-16-mood-page-perf：调研确认心情页卡顿主因在渲染不在请求（loadedYears去重已生效）。修复：P1 MoodGrid年历365格×60ms stagger长尾22s→桌面限前56格(约3.4s)+移动端/reduced-motion不播（useAnime.staggerEnter加maxCount+isMobileViewport判定）；MoodCell常驻will-change移到hover、is-today光环box-shadow改::after transform/opacity（终审补z-index:0防逃逸到祖先层叠被卡片背景盖住）；P2 CurtainReveal每会话只播一次（MoodView模块级标志）+移动端/reduced-motion JS跳过+CSS display:none兜底；P3 WishingBottle大瓶波浪移动端animation:none（照搬mini先例）；P4 MoodPicker overlay移动端去backdrop-filter底色0.25→0.45；P5 AppSidebar心情84格移动端抽屉未开时v-if不渲染；清理死代码MoodVentInput.vue与mood.js yearEntries。spec新增：大列表stagger上限/::after光环需宿主z-index:0。npm run build全绿；未实机验证未部署。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `465feae` | (see git log) |
+| `f5487b5` | (see git log) |
+
+### Status
+
+[OK] **Completed**
