@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import api, { unwrap } from '@/api/client'
 import { useScheduleStore } from '@/stores/schedule'
+import { queueDayDataMerge } from '@/utils/dayDataMerge'
 
 /* 模板列表为日期无关全局数据：会话内只拉一次（并发单飞；失败允许重试） */
 let _routinesLoaded = false
@@ -119,12 +120,15 @@ export const useRoutineStore = defineStore('routines', {
         existing.routines = this.dailyCopies[date] || []
         localStorage.setItem(key, JSON.stringify(existing))
       } catch { /* silent degrade */ }
-      // 服务端 day-data 是覆盖式整写：先 GET 合并其他字段再 PUT，避免清空 blocks/archive 等
-      try {
-        const { data } = await api.get(`/day-data/${date}`)
-        const existing = unwrap(data) || {}
-        await api.put(`/day-data/${date}`, { ...existing, routines: this.dailyCopies[date] || [] })
-      } catch { /* silent */ }
+      // 服务端 day-data 是覆盖式整写：先 GET 合并其他字段再 PUT，避免清空 blocks/archive 等。
+      // 合并写经 per-date 队列串行：与 archive.js 的合并写并发时互覆盖会丢字段
+      await queueDayDataMerge(date, async () => {
+        try {
+          const { data } = await api.get(`/day-data/${date}`)
+          const existing = unwrap(data) || {}
+          await api.put(`/day-data/${date}`, { ...existing, routines: this.dailyCopies[date] || [] })
+        } catch { /* silent */ }
+      })
     },
 
     initFromCache() {

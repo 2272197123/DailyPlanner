@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useScheduleStore } from '@/stores/schedule'
 import { useArchiveStore } from '@/stores/archive'
 import { useToastStore } from '@/stores/toast'
@@ -28,14 +28,22 @@ const displayRating = computed(() => {
   return rating.value
 })
 
-/* ── Init ── */
-onMounted(() => {
-  // Load existing review for current date
-  const review = archiveStore.reviewForDate(scheduleStore.currentDate)
-  if (review) {
-    feedback.value = review.feedback || ''
-    rating.value = review.rating || 0
-  }
+/* ── Init：挂载与切日期时从服务端读回存档（含 AI 评价）并同步表单 ── */
+/* 序号守卫：快速切日期时过期 loadCurrent 的表单写入直接丢弃（同 PlanView loadSeq 模式） */
+let loadSeq = 0
+async function loadCurrent() {
+  const seq = ++loadSeq
+  const date = scheduleStore.currentDate
+  await archiveStore.loadReview(date)
+  if (seq !== loadSeq || date !== scheduleStore.currentDate) return
+  const review = archiveStore.reviewForDate(date)
+  feedback.value = review ? (review.feedback || '') : ''
+  rating.value = review ? (review.rating || 0) : 0
+}
+
+onMounted(loadCurrent)
+watch(() => scheduleStore.currentDate, (date) => {
+  if (date) loadCurrent()
 })
 
 /* ── Actions ── */
@@ -164,32 +172,30 @@ async function handleDelete() {
       </div>
     </template>
 
-    <!-- Active feedback + archive form -->
+    <!-- Active feedback + archive form（历史日期也可补写/补档） -->
     <template v-else-if="!isArchived">
       <textarea
         v-model="feedback"
         class="rp-textarea"
         :placeholder="isPast ? '该日期未存档，仍可填写反馈...' : '今天完成了什么？有什么困难？'"
         rows="3"
-        :disabled="isPast"
       ></textarea>
 
       <div class="rp-actions">
         <div class="rp-rating">
-          <span class="rp-rating-label">今日状态:</span>
+          <span class="rp-rating-label">{{ isPast ? '当日状态:' : '今日状态:' }}</span>
           <button
             v-for="i in 5"
             :key="i"
             class="rp-star-btn"
             :class="{ active: rating >= i }"
             @click="rating = rating === i ? 0 : i"
-            :disabled="isPast"
           >
             ★
           </button>
         </div>
 
-        <div class="rp-archive-row" v-if="!isPast">
+        <div class="rp-archive-row">
           <label class="rp-ai-toggle">
             <input type="checkbox" v-model="requestAi" />
             <span>🤖 AI 评价</span>
@@ -199,7 +205,7 @@ async function handleDelete() {
             :disabled="isArchiving"
             @click="handleArchive"
           >
-            {{ isArchiving ? '存档中...' : '📦 存档' }}
+            {{ isArchiving ? '存档中...' : (isPast ? '📦 补档' : '📦 存档') }}
           </button>
         </div>
       </div>

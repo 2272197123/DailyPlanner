@@ -1,10 +1,30 @@
 import { defineStore } from 'pinia'
-import api from '@/api/client'
+import api, { unwrap } from '@/api/client'
 import { useScheduleStore } from '@/stores/schedule'
 import { useRoutineStore } from '@/stores/routines'
 import { useCurrencyStore } from '@/stores/currency'
 import { useMoodStore } from '@/stores/mood'
 import { hexToHsl } from '@/utils/color'
+import { queueDayDataMerge } from '@/utils/dayDataMerge'
+
+/* loadReview 同 date 并发去重（参照 schedule.js fetchDay 的 in-flight 模式） */
+const _reviewInFlight = new Map() // date → Promise
+/* 本地存档写入时间戳：loadReview 的 GET 响应若旧于本地写入（archiveDay 的 PUT
+   尚未落地时并发读回），跳过覆盖，避免过期响应冲掉刚存档的复盘
+   （同 schedule.js _fetchDayRemote 的 startedAt 守卫模式） */
+const _reviewLocalWriteAt = {} // date → ts
+/* 自动存档防重标记：值为已触发自动存档的日期（同日只触发一次） */
+const AUTO_ARCHIVE_KEY = 'dp_auto_archive_done'
+/* 补档检测回溯天数：昨日 + 前日 */
+const MISSED_LOOKBACK_DAYS = 2
+
+function _shiftDate(date, deltaDays) {
+  const d = new Date(date + 'T00:00:00')
+  d.setDate(d.getDate() + deltaDays)
+  return d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0')
+}
 
 /* 由色相推出冷暖倾向（帮助 AI 判断情绪效价，不硬编码心情标签） */
 function colorTendency(hex) {
@@ -17,6 +37,7 @@ function colorTendency(hex) {
 export const useArchiveStore = defineStore('archive', {
   state: () => ({
     reviewData: {},           // { [date]: { feedback, rating, aiReview, archivedAt } }
+    missedDates: [],          // 近期已过存档点但未存档的日期（补档提示用）
     aiPersonaPrompt: '',
     archiveHour: 23,
     archiveMinute: 30,
@@ -96,14 +117,101 @@ export const useArchiveStore = defineStore('archive', {
       }
 
       this.reviewData[date] = review
+      _reviewLocalWriteAt[date] = Date.now()
+      this.missedDates = this.missedDates.filter(d => d !== date)
 
       // Persist: localStorage + API
       this._persistLocal(date, review)
-      try {
-        await api.put(`/day-data/${date}`, { archiveData: review })
-      } catch { /* silent */ }
+      // 服务端 day-data 是覆盖式整写：先 GET 合并其他字段再 PUT，
+      // 避免存档清掉该日的 routines/routineProgress/timelineCfg（照 routines.js 模式）。
+      // 合并写经 per-date 队列串行：与 routines.js 的合并写并发时互覆盖会丢字段
+      await queueDayDataMerge(date, async () => {
+        try {
+          const { data } = await api.get(`/day-data/${date}`)
+          const existing = unwrap(data) || {}
+          await api.put(`/day-data/${date}`, { ...existing, archiveData: review })
+        } catch { /* silent */ }
+      })
 
       return review
+    },
+
+    /** 从服务端读回某日的存档复盘（含 AI 评价），灌回 reviewData。
+     *  localStorage 先行兜底展示，服务端为最终真源；同 date 并发去重 */
+    async loadReview(date) {
+      if (!date) return null
+      if (_reviewInFlight.has(date)) return _reviewInFlight.get(date)
+      const p = (async () => {
+        if (!this.reviewData[date]) {
+          try {
+            const raw = localStorage.getItem('dp_day_data_' + date)
+            if (raw) {
+              const cached = JSON.parse(raw)
+              if (cached.archiveData) this.reviewData[date] = cached.archiveData
+            }
+          } catch { /* ignore */ }
+        }
+        const startedAt = Date.now()
+        try {
+          const { data } = await api.get(`/day-data/${date}`)
+          const remote = unwrap(data)
+          /* 服务端有存档才覆盖内存：服务端无存档时保留本地较新的存档（PUT 可能失败过）。
+             飞行期间本地已发生存档写入（archiveDay 的 PUT 尚未落地）时响应必然更旧，
+             跳过覆盖，否则过期响应会冲掉刚存档的复盘 */
+          if (remote && remote.archiveData &&
+              !(_reviewLocalWriteAt[date] && _reviewLocalWriteAt[date] >= startedAt)) {
+            this.reviewData[date] = remote.archiveData
+          }
+        } catch { /* 离线/失败时保留本地缓存 */ }
+        return this.reviewData[date] || null
+      })().finally(() => _reviewInFlight.delete(date))
+      _reviewInFlight.set(date, p)
+      return p
+    },
+
+    /** 到点自动存档：now >= 存档时间且今日未存档时自动 archiveDay(today)。
+     *  同日只触发一次（localStorage 持久化标记，先于执行写入，防定时器/visibilitychange 并发重入）。
+     *  AI 评价失败时 archiveDay 内部已降级为无 AI 文本存档，不弹错 */
+    async checkAutoArchive() {
+      const scheduleStore = useScheduleStore()
+      const today = scheduleStore.today
+      if (!this.shouldPromptArchive) return false
+      try {
+        if (localStorage.getItem(AUTO_ARCHIVE_KEY) === today) return false
+        localStorage.setItem(AUTO_ARCHIVE_KEY, today)
+      } catch { /* localStorage 不可用时仍执行，由 isArchived 防重 */ }
+      // 确保今日数据在内存中（统计口径需要 blocks/routineProgress/routines）
+      try {
+        if (!scheduleStore.schedules[today]) await scheduleStore.fetchDay(today)
+        /* 本地缓存被清时 reviewData 为空、防重标记也丢了：先从服务端读回，
+           已存档则不重复自动存档（否则空 feedback 的自动存档会覆盖已有的手动存档） */
+        await this.loadReview(today)
+        await scheduleStore.fetchRoutineProgress(today)
+        await useRoutineStore().fetchRoutines()
+      } catch { /* 数据拉取失败不阻塞存档，按已有内存态统计 */ }
+      if (this.isArchived(today)) return false // 拉取期间可能已被手动存档
+      try {
+        await this.archiveDay(today, { requestAi: true })
+      } catch {
+        /* 存档意外失败：回滚防重标记，下个检查周期可重试（否则失败一次当天再不自动存档） */
+        try { localStorage.removeItem(AUTO_ARCHIVE_KEY) } catch { /* ignore */ }
+        return false
+      }
+      return true
+    },
+
+    /** 次日打开检测：近期（昨日/前日）未存档的日期，给补档入口 */
+    async checkMissedArchives() {
+      const scheduleStore = useScheduleStore()
+      const today = scheduleStore.today
+      const missed = []
+      for (let back = 1; back <= MISSED_LOOKBACK_DAYS; back++) {
+        const date = _shiftDate(today, -back)
+        const review = await this.loadReview(date)
+        if (!review || !review.archivedAt) missed.push(date)
+      }
+      this.missedDates = missed
+      return missed
     },
 
     async _requestAiReview(date, { feedback, rating, stats, blocks, routines, routineProgress }) {
@@ -173,6 +281,7 @@ export const useArchiveStore = defineStore('archive', {
     /** Delete the archived review for a date (local + server) */
     async deleteReview(date) {
       delete this.reviewData[date]
+      _reviewLocalWriteAt[date] = Date.now()
       // 清本地缓存中的 archiveData（保留其他字段）
       try {
         const key = 'dp_day_data_' + date
@@ -184,11 +293,14 @@ export const useArchiveStore = defineStore('archive', {
         }
       } catch { /* ignore */ }
       // 服务端：day-data 是覆盖式整写，先 GET 合并再 PUT，仅清 archiveData
-      try {
-        const resp = await api.get(`/day-data/${date}`)
-        const existing = (resp.data && resp.data.data) || {}
-        await api.put(`/day-data/${date}`, { ...existing, archiveData: null })
-      } catch { /* silent */ }
+      // （与其他写方的合并写经同一 per-date 队列串行，防互覆盖）
+      await queueDayDataMerge(date, async () => {
+        try {
+          const resp = await api.get(`/day-data/${date}`)
+          const existing = unwrap(resp.data) || {}
+          await api.put(`/day-data/${date}`, { ...existing, archiveData: null })
+        } catch { /* silent */ }
+      })
     },
 
     /** Set AI persona prompt */

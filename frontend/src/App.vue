@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import anime from 'animejs'
 import { useCurrencyStore } from '@/stores/currency'
@@ -11,6 +11,7 @@ import { useScheduleStore } from '@/stores/schedule'
 import { useGoalStore } from '@/stores/goals'
 import { useAccountingStore } from '@/stores/accounting'
 import { useRoutineStore } from '@/stores/routines'
+import { useToastStore } from '@/stores/toast'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AiDrawer from '@/components/ai/AiDrawer.vue'
 import ToastContainer from '@/components/shared/ToastContainer.vue'
@@ -24,6 +25,7 @@ const scheduleStore = useScheduleStore()
 const goalStore = useGoalStore()
 const accountingStore = useAccountingStore()
 const routineStore = useRoutineStore()
+const toastStore = useToastStore()
 
 const route = useRoute()
 
@@ -72,6 +74,42 @@ onMounted(() => {
 function flushPendingSaves() {
   scheduleStore.flushAllSaves()
 }
+
+let autoArchiveTimer = null
+
+async function checkAutoArchive() {
+  const done = await archiveStore.checkAutoArchive()
+  if (done) toastStore.ok('🌙 已到存档时间，已自动存档今日复盘')
+}
+
+function handleVisibleArchive() {
+  if (!document.hidden) checkAutoArchive()
+}
+
+/* 到点自动存档检查器 + 近期未存档补档提示：会话内只初始化一次。
+   App 是常驻根组件，登录走 router.push 不会重挂载——若挂载时在 /login
+   （公开页），须等切到非公开页再启动，否则整个会话都不会自动存档 */
+let archiveChecksInit = false
+function initArchiveChecks() {
+  if (archiveChecksInit || isPublicPage.value) return
+  archiveChecksInit = true
+  checkAutoArchive()
+  autoArchiveTimer = setInterval(checkAutoArchive, 60000)
+  document.addEventListener('visibilitychange', handleVisibleArchive)
+  archiveStore.checkMissedArchives().then(missed => {
+    if (missed && missed.length) {
+      toastStore.warn(missed.join('、') + ' 未存档，可在计划页复盘面板补档')
+    }
+  })
+}
+
+onMounted(initArchiveChecks)
+watch(isPublicPage, initArchiveChecks)
+
+onBeforeUnmount(() => {
+  if (autoArchiveTimer) clearInterval(autoArchiveTimer)
+  document.removeEventListener('visibilitychange', handleVisibleArchive)
+})
 </script>
 
 <template>
