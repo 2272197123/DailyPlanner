@@ -4,6 +4,7 @@ import anime from 'animejs'
 import { useScheduleStore } from '@/stores/schedule'
 import { useRoutineStore } from '@/stores/routines'
 import { useCurrencyStore } from '@/stores/currency'
+import { useCollectionStore } from '@/stores/collection'
 import { useToastStore } from '@/stores/toast'
 import { toLocalDate, calcTaskReward } from '@/utils/format'
 import { useAnime } from '@/composables/useAnime'
@@ -21,6 +22,7 @@ const emit = defineEmits(['add', 'rules', 'import'])
 const scheduleStore = useScheduleStore()
 const routineStore = useRoutineStore()
 const currencyStore = useCurrencyStore()
+const collectionStore = useCollectionStore()
 const toastStore = useToastStore()
 const { burst } = useAnime()
 
@@ -243,16 +245,32 @@ function maybeCelebrate() {
   }
 }
 
-/* ═══ 勾选完成（XP 防刷分 + 卡牌庆祝）═══ */
+/* ═══ 勾选完成（XP 防刷分 + 卡牌庆祝 + 掉卡）═══ */
 const celebrationRef = ref(null)
 
 function playCelebration(block, reward, event) {
-  celebrationRef.value?.play({
+  /* CardCelebration.play 返回完成 Promise（动画播完 resolve） */
+  return celebrationRef.value?.play({
     x: event?.clientX,
     y: event?.clientY,
     subject: block?.subject || '',
     emoji: CAT_EMOJI[block?.category] || '📌',
     reward
+  })
+}
+
+/* 掉卡链路（v16）：与 XP award/revoke 完全独立——取消完成不回收卡、
+   重复完成不重复掉（服务端按 `{date}:{blockId}` 幂等）。
+   揭示动效排在完成庆祝之后，避免两个全屏 overlay 叠播。 */
+function drawCardForBlock(date, blockId, celebrationDone) {
+  const drawP = collectionStore.drawFromTask(date, blockId)
+  Promise.all([drawP, celebrationDone]).then(([res]) => {
+    if (!res) return
+    if (!res.duplicate && res.card) {
+      collectionStore.enqueueReveal({ card: res.card, achievements: res.newAchievements })
+    } else if ((res.newAchievements || []).length) {
+      collectionStore.enqueueReveal({ achievements: res.newAchievements })
+    }
   })
 }
 
@@ -268,10 +286,12 @@ function handleToggleTask(blockId, event) {
       reward = r
       currencyStore.addXP(r, '完成任务: ' + (block ? block.subject : blockId))
     }
-    playCelebration(block, reward, event)
+    const celebrationDone = playCelebration(block, reward, event)
+    drawCardForBlock(date, blockId, celebrationDone)
     maybeCelebrate()
   } else {
-    // 取消完成：按存证金额退还 XP（无存证时回退重算，兼容旧发放）
+    // 取消完成：按存证金额退还 XP（无存证时回退重算，兼容旧发放）。
+    // 不掉卡链路：已掉出的卡不回收（v16 设计口径，避免收集反复横跳）
     const fallback = block ? calcTaskReward(block) * 5 : 0
     const refunded = scheduleStore.revokeAward(date, 'block_' + blockId, fallback)
     if (refunded) {
@@ -292,7 +312,8 @@ function handleToggleSubtask(blockId, si, event) {
       reward = r
       currencyStore.addXP(r, '完成所有子任务: ' + (block ? block.subject : blockId))
     }
-    playCelebration(block, reward, event)
+    const celebrationDone = playCelebration(block, reward, event)
+    drawCardForBlock(date, blockId, celebrationDone)
     maybeCelebrate()
   } else {
     // 子任务从全勾变为未全勾：整体奖励已发的要退还

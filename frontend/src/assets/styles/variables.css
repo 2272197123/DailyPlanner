@@ -45,6 +45,17 @@
   --mood-custom-4: #14b8a6;
   --mood-custom-5: #d946ef;
 
+  /* ── 卡牌稀有度（v16 收集系统身份色；soft=底色晕染，glow=外发光） ── */
+  --rarity-n: #9aa0aa;
+  --rarity-r: #4a7dd8;
+  --rarity-r-soft: rgba(74, 125, 216, 0.14);
+  --rarity-sr: #8b5cf6;
+  --rarity-sr-soft: rgba(139, 92, 246, 0.15);
+  --rarity-ssr: #d9a92c;
+  --rarity-ssr-deep: #a67c12;
+  --rarity-ssr-soft: rgba(217, 169, 44, 0.2);
+  --rarity-ssr-glow: rgba(217, 169, 44, 0.35);
+
   /* ── Glassmorphism ── */
   --glass-bg: rgba(255, 255, 255, 0.72);
   --glass-border: rgba(255, 255, 255, 0.45);
@@ -150,6 +161,17 @@
   --danger-bg: rgba(240, 117, 117, 0.16);
   --info: #8aa5f5;
   --info-bg: rgba(138, 165, 245, 0.16);
+
+  /* ── 卡牌稀有度（dark：提亮 + 晕染加深） ── */
+  --rarity-n: #8b8f99;
+  --rarity-r: #6f9ae8;
+  --rarity-r-soft: rgba(111, 154, 232, 0.2);
+  --rarity-sr: #a580ff;
+  --rarity-sr-soft: rgba(165, 128, 255, 0.2);
+  --rarity-ssr: #e8c874;
+  --rarity-ssr-deep: #e8c874;
+  --rarity-ssr-soft: rgba(232, 200, 116, 0.22);
+  --rarity-ssr-glow: rgba(232, 200, 116, 0.4);
 
   /* ── Glassmorphism (dark) ── */
   --glass-bg: rgba(24, 25, 33, 0.78);

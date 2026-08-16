@@ -64,10 +64,17 @@ function starShower() {
 }
 
 let playing = false
+let currentFinished = null
 
 async function play({ x, y, subject: s, emoji: e, reward: r }) {
-  if (playing) return
+  /* 返回 Promise：动画播完（或早退）后 resolve，供掉卡揭示等后续动效排队。
+     正在播放时本次庆祝跳过，但返回进行中的 Promise——
+     否则掉卡揭示会在庆祝遮罩（同 z-index 且后挂载）底下播完，用户看不到新卡 */
+  if (playing) return currentFinished
   playing = true
+  let done
+  const finished = new Promise(resolve => { done = resolve })
+  currentFinished = finished
   subject.value = s || ''
   emoji.value = e || '📌'
   reward.value = r || 0
@@ -76,14 +83,14 @@ async function play({ x, y, subject: s, emoji: e, reward: r }) {
 
   const card = cardRef.value
   const inner = innerRef.value
-  if (!card || !inner) { active.value = false; playing = false; return }
+  if (!card || !inner) { active.value = false; playing = false; done(); return finished }
 
   /* 起点：点击位置（相对屏幕中心的偏移），小且倾斜 */
   const dx = (x ?? window.innerWidth / 2) - window.innerWidth / 2
   const dy = (y ?? window.innerHeight / 2) - window.innerHeight / 2
 
   const tl = anime.timeline({
-    complete: () => { active.value = false; playing = false }
+    complete: () => { active.value = false; playing = false; done() }
   })
 
   tl
@@ -144,6 +151,8 @@ async function play({ x, y, subject: s, emoji: e, reward: r }) {
       easing: 'linear',
       duration: 420
     }, '-=420')
+
+  return finished
 }
 
 defineExpose({ play })
